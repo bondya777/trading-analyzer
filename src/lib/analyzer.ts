@@ -1004,7 +1004,7 @@ function buildPositionOverview(
   return {
     有规模数据的账户数: uniqueAccounts.size,
     总持仓规模: Math.round((totalSize / 1e8) * 10000) / 10000,
-    平均账户规模: Math.round((totalSize / sizes.length / 1e8) * 10000) / 10000,
+    平均账户规模: sizes.length > 0 ? Math.round((totalSize / sizes.length / 1e8) * 10000) / 10000 : 0,
     中位数规模: Math.round((medianSize / 1e8) * 10000) / 10000,
     平均单位净值: navs.length > 0 ? Math.round((navs.reduce((a, b) => a + b, 0) / navs.length) * 10000) / 10000 : 0,
     有净值数据的账户数: navs.length,
