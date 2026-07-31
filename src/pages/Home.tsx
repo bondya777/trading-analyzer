@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   LineChart, Line, AreaChart, Area, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
@@ -12,13 +12,40 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { parseExcel, runAnalysis, type AnalysisResult, type BondAccountDetail } from '@/lib/analyzer';
+import { parseExcel, runAnalysis, type AnalysisResult, type BondAccountDetail, type PositionTimeSeries } from '@/lib/analyzer';
 import {
   Upload, TrendingUp, Activity, BarChart3, AlertTriangle, Package, FileText,
-  Search, X, Zap, GitCompare, Thermometer, RadarIcon, Clock,
+  Search, X, GitCompare, Thermometer, Wallet, Scale,
 } from 'lucide-react';
+
+// ============================================================
+// 通用子组件
+// ============================================================
+
+function StatCard({ title, value, subtitle, icon: Icon, color = 'blue' }: {
+  title: string; value: string | number; subtitle?: string;
+  icon: React.ElementType; color?: string;
+}) {
+  const colorMap: Record<string, string> = {
+    blue: 'text-blue-600', green: 'text-green-600', red: 'text-red-600',
+    amber: 'text-amber-600', purple: 'text-purple-600', cyan: 'text-cyan-600',
+  };
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-muted-foreground">{title}</p>
+            <p className={`text-xl font-bold ${colorMap[color] || colorMap.blue}`}>{value}</p>
+            {subtitle && <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>}
+          </div>
+          <Icon className={`w-5 h-5 ${colorMap[color] || colorMap.blue}`} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function Top10Section({ title, byValue, byCount, color = '#3b82f6' }: {
   title: string;
@@ -34,68 +61,46 @@ function Top10Section({ title, byValue, byCount, color = '#3b82f6' }: {
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-muted-foreground">{title}</h3>
-      <div className="h-72">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 30 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" angle={-30} textAnchor="end" height={60} fontSize={11} />
-            <YAxis fontSize={11} />
-            <Tooltip formatter={(v: number) => v.toFixed(4)} />
-            <Legend />
-            <Bar dataKey="金额" fill={color} name="交易金额(亿元)" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">金额 Top10</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">按金额 Top10</CardTitle></CardHeader>
           <CardContent>
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={chartData} layout="vertical" margin={{ left: 80, right: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" />
+                <YAxis dataKey="name" type="category" width={75} tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v: number) => `${v} 亿`} />
+                <Bar dataKey="金额" fill={color} radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">排名</TableHead>
-                  <TableHead className="text-xs">账户代码</TableHead>
-                  <TableHead>账户名称</TableHead>
-                  <TableHead className="text-right">金额(亿元)</TableHead>
-                  <TableHead className="text-right">笔数</TableHead>
-                </TableRow>
-              </TableHeader>
+              <TableHeader><TableRow><TableHead>排名</TableHead><TableHead>账户代码</TableHead><TableHead>账户名称</TableHead><TableHead>金额(亿)</TableHead></TableRow></TableHeader>
               <TableBody>
                 {byValue.map((item, i) => (
-                  <TableRow key={item.账户代码}>
-                    <TableCell><Badge variant={i < 3 ? 'default' : 'secondary'}>{i + 1}</Badge></TableCell>
-                    <TableCell className="text-xs font-mono text-muted-foreground">{item.账户代码}</TableCell>
-                    <TableCell className="font-medium text-xs">{item.账户名称}</TableCell>
-                    <TableCell className="text-right font-mono text-xs">{item.交易金额.toFixed(4)}</TableCell>
-                    <TableCell className="text-right text-xs">{item.交易笔数}</TableCell>
-                  </TableRow>
+                  <TableRow key={item.账户代码}><TableCell>{i + 1}</TableCell><TableCell className="font-mono text-xs">{item.账户代码}</TableCell><TableCell>{item.账户名称}</TableCell><TableCell className="text-right font-mono">{item.交易金额}</TableCell></TableRow>
                 ))}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">笔数 Top10</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">按笔数 Top10</CardTitle></CardHeader>
           <CardContent>
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={byCount.map(item => ({ name: item.账户名称.length > 12 ? item.账户名称.slice(0, 12) + '...' : item.账户名称, 笔数: item.交易笔数 }))} layout="vertical" margin={{ left: 80, right: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" />
+                <YAxis dataKey="name" type="category" width={75} tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="笔数" fill="#10b981" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">排名</TableHead>
-                  <TableHead className="text-xs">账户代码</TableHead>
-                  <TableHead>账户名称</TableHead>
-                  <TableHead className="text-right">笔数</TableHead>
-                  <TableHead className="text-right">金额(亿元)</TableHead>
-                </TableRow>
-              </TableHeader>
+              <TableHeader><TableRow><TableHead>排名</TableHead><TableHead>账户代码</TableHead><TableHead>账户名称</TableHead><TableHead>笔数</TableHead></TableRow></TableHeader>
               <TableBody>
                 {byCount.map((item, i) => (
-                  <TableRow key={item.账户代码}>
-                    <TableCell><Badge variant={i < 3 ? 'default' : 'secondary'}>{i + 1}</Badge></TableCell>
-                    <TableCell className="text-xs font-mono text-muted-foreground">{item.账户代码}</TableCell>
-                    <TableCell className="font-medium text-xs">{item.账户名称}</TableCell>
-                    <TableCell className="text-right text-xs">{item.交易笔数}</TableCell>
-                    <TableCell className="text-right font-mono text-xs">{item.交易金额.toFixed(4)}</TableCell>
-                  </TableRow>
+                  <TableRow key={item.账户代码}><TableCell>{i + 1}</TableCell><TableCell className="font-mono text-xs">{item.账户代码}</TableCell><TableCell>{item.账户名称}</TableCell><TableCell className="text-right font-mono">{item.交易笔数}</TableCell></TableRow>
                 ))}
               </TableBody>
             </Table>
@@ -106,903 +111,916 @@ function Top10Section({ title, byValue, byCount, color = '#3b82f6' }: {
   );
 }
 
-function AccountDetailCard({ account, index }: { account: BondAccountDetail; index: number }) {
+function AccountDetailCard({ detail }: { detail: BondAccountDetail }) {
   return (
-    <AccordionItem value={`acct-${index}`}>
-      <AccordionTrigger className="text-sm hover:no-underline py-3">
-        <div className="flex items-center gap-3 text-left w-full pr-4">
-          <Badge variant="outline">{index + 1}</Badge>
-          <span className="font-semibold">{account.账户名称}</span>
-          <span className="text-xs text-muted-foreground font-mono">{account.账户代码}</span>
-          <Badge variant="secondary" className="ml-auto text-xs">{account.总笔数} 笔</Badge>
+    <Card className="mb-4">
+      <CardHeader><CardTitle className="text-sm">{detail.账户名称} <span className="text-xs text-muted-foreground font-mono">({detail.账户代码})</span></CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <div><span className="text-muted-foreground">总笔数:</span> <strong>{detail.总笔数}</strong></div>
         </div>
-      </AccordionTrigger>
-      <AccordionContent>
-        <div className="space-y-4 pl-4 pb-2">
-          {account.债券类别.length > 0 && (
-            <div>
-              <h4 className="text-sm font-semibold mb-2 flex items-center gap-2"><BarChart3 className="w-4 h-4" /> 债券类别分析</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {account.债券类别.map((cat) => (
-                  <Card key={cat.类别} className="bg-muted/30">
-                    <CardContent className="pt-4 pb-3">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="font-semibold text-sm">{cat.类别}</span>
-                        {cat.平均期限 !== undefined && <Badge variant="outline" className="text-xs">平均期限 {cat.平均期限} 年</Badge>}
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 text-xs mb-2">
-                        <div><div className="text-muted-foreground">买入</div><div className="font-mono font-medium text-green-600">{cat.买入金额.toFixed(4)}</div></div>
-                        <div><div className="text-muted-foreground">卖出</div><div className="font-mono font-medium text-red-500">{cat.卖出金额.toFixed(4)}</div></div>
-                        <div><div className="text-muted-foreground">净买卖</div><div className={`font-mono font-medium ${cat.净买卖 >= 0 ? 'text-green-600' : 'text-red-500'}`}>{cat.净买卖.toFixed(4)}</div></div>
-                      </div>
-                      {Object.keys(cat.品种分布).length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {Object.entries(cat.品种分布).map(([k, v]) => <Badge key={k} variant="secondary" className="text-xs">{k}: {v}</Badge>)}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
-          {account.基金分析 && (
-            <div>
-              <h4 className="text-sm font-semibold mb-2 flex items-center gap-2"><TrendingUp className="w-4 h-4" /> 基金交易分析</h4>
-              <Card className="bg-muted/30">
-                <CardContent className="pt-4 pb-3">
-                  <div className="grid grid-cols-2 gap-4 text-xs mb-2">
-                    <div><span className="text-muted-foreground">买入:</span> <span className="font-mono text-green-600">{account.基金分析.买入金额.toFixed(4)} 亿元 ({account.基金分析.买入笔数} 笔)</span></div>
-                    <div><span className="text-muted-foreground">卖出:</span> <span className="font-mono text-red-500">{account.基金分析.卖出金额.toFixed(4)} 亿元 ({account.基金分析.卖出笔数} 笔)</span></div>
+        {detail.债券类别.length > 0 && (
+          <div>
+            <h4 className="text-xs font-semibold mb-2">债券类别分析</h4>
+            <div className="grid grid-cols-1 gap-2">
+              {detail.债券类别.map(cat => (
+                <div key={cat.类别} className="bg-muted rounded p-2 text-sm">
+                  <div className="font-semibold">{cat.类别}</div>
+                  <div className="grid grid-cols-4 gap-2 text-xs mt-1">
+                    <div>买入: {cat.买入金额}亿 ({cat.买入笔数}笔)</div>
+                    <div>卖出: {cat.卖出金额}亿 ({cat.卖出笔数}笔)</div>
+                    <div>净买卖: {cat.净买卖}亿</div>
+                    {cat.平均期限 !== undefined && <div>平均期限: {cat.平均期限}年</div>}
                   </div>
-                  <div className="text-xs text-muted-foreground">涉及基金: {account.基金分析.涉及基金.join(', ')}</div>
-                </CardContent>
-              </Card>
+                  {Object.keys(cat.品种分布).length > 0 && (
+                    <div className="mt-1 text-xs text-muted-foreground">品种: {Object.entries(cat.品种分布).map(([k, v]) => `${k}(${v})`).join(', ')}</div>
+                  )}
+                </div>
+              ))}
             </div>
-          )}
-          {account.转债分析 && (
-            <div>
-              <h4 className="text-sm font-semibold mb-2 flex items-center gap-2"><Activity className="w-4 h-4" /> 可转债交易分析</h4>
-              <Card className="bg-muted/30">
-                <CardContent className="pt-4 pb-3">
-                  <div className="grid grid-cols-2 gap-4 text-xs mb-2">
-                    <div><span className="text-muted-foreground">买入:</span> <span className="font-mono text-green-600">{account.转债分析.买入金额.toFixed(4)} 亿元 ({account.转债分析.买入笔数} 笔)</span></div>
-                    <div><span className="text-muted-foreground">卖出:</span> <span className="font-mono text-red-500">{account.转债分析.卖出金额.toFixed(4)} 亿元 ({account.转债分析.卖出笔数} 笔)</span></div>
-                  </div>
-                  <div className="text-xs text-muted-foreground">涉及转债: {account.转债分析.涉及转债.join(', ')}</div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-          {account.期货分析 && (
-            <div>
-              <h4 className="text-sm font-semibold mb-2 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> 国债期货交易分析</h4>
-              <Card className="bg-muted/30">
-                <CardContent className="pt-4 pb-3">
-                  <div className="grid grid-cols-2 gap-4 text-xs">
-                    <div><span className="text-muted-foreground">交易笔数:</span> <span className="font-mono font-medium">{account.期货分析.笔数} 笔</span></div>
-                    <div><span className="text-muted-foreground">交易总金额:</span> <span className="font-mono font-medium">{account.期货分析.总金额.toFixed(4)} 亿元</span></div>
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-2">涉及品种: {account.期货分析.涉及品种.join(', ')}</div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-          {Object.keys(account.买卖方向).length > 0 && (
-            <div>
-              <h4 className="text-sm font-semibold mb-2">全账户买卖方向总览</h4>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(account.买卖方向).map(([dir, amount]) => (
-                  <Badge key={dir} variant="outline" className="text-xs">{dir}: {amount.toFixed(4)} 亿元</Badge>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </AccordionContent>
-    </AccordionItem>
-  );
-}
-
-function HeatmapChart({ data, months }: { data: import('@/lib/analyzer').HeatmapData[]; months: string[] }) {
-  if (data.length === 0 || months.length === 0) return null;
-  let maxVal = 0;
-  for (const row of data) {
-    for (const m of months) {
-      const v = typeof row[m] === 'number' ? (row[m] as number) : 0;
-      if (v > maxVal) maxVal = v;
-    }
-  }
-  if (maxVal === 0) maxVal = 1;
-  const getColor = (v: number) => {
-    const ratio = Math.min(v / maxVal, 1);
-    const r = Math.round(239 - ratio * 180);
-    const g = Math.round(246 - ratio * 120);
-    const b = Math.round(255 - ratio * 40);
-    return `rgb(${r},${g},${b})`;
-  };
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs border-collapse">
-        <thead>
-          <tr>
-            <th className="text-left p-2 border-b sticky left-0 bg-background z-10 min-w-[160px]">账户</th>
-            {months.map(m => <th key={m} className="text-center p-2 border-b min-w-[70px]">{m}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((row) => (
-            <tr key={row.账户代码}>
-              <td className="p-2 border-b sticky left-0 bg-background z-10">
-                <div className="font-medium truncate max-w-[120px]" title={row.账户名称 as string}>{row.账户名称 as string}</div>
-                <div className="text-muted-foreground font-mono text-[10px]">{row.账户代码}</div>
-              </td>
-              {months.map(m => {
-                const v = typeof row[m] === 'number' ? (row[m] as number) : 0;
-                return (
-                  <td key={m} className="p-1 border-b text-center" style={{ backgroundColor: getColor(v) }}>
-                    <span className={`font-mono ${v > maxVal * 0.5 ? 'text-white' : 'text-foreground'}`}>{v > 0 ? v.toFixed(2) : ''}</span>
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-        <span>低</span>
-        <div className="h-3 w-32 rounded" style={{ background: 'linear-gradient(to right, rgb(239,246,255), rgb(59,130,246))' }} />
-        <span>高 ({maxVal.toFixed(2)} 亿元)</span>
-      </div>
-    </div>
-  );
-}
-
-function AccountSearchDialog({ open, onClose, accountCode, allAccountsDetail }: {
-  open: boolean; onClose: () => void; accountCode: string;
-  allAccountsDetail: Record<string, BondAccountDetail>;
-}) {
-  const account = allAccountsDetail[accountCode];
-  if (!account) return null;
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <span>{account.账户名称}</span>
-            <Badge variant="outline" className="font-mono text-xs">{account.账户代码}</Badge>
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 mt-2">
-          <div className="grid grid-cols-3 gap-3">
-            <Card className="bg-muted/30">
-              <CardContent className="pt-4 pb-3 text-center">
-                <div className="text-2xl font-bold text-primary">{account.总笔数}</div>
-                <div className="text-xs text-muted-foreground">总交易笔数</div>
-              </CardContent>
-            </Card>
-            <Card className="bg-muted/30">
-              <CardContent className="pt-4 pb-3 text-center">
-                <div className="text-2xl font-bold text-primary">{Object.values(account.买卖方向).reduce((a, b) => a + b, 0).toFixed(4)}</div>
-                <div className="text-xs text-muted-foreground">总交易金额(亿元)</div>
-              </CardContent>
-            </Card>
-            <Card className="bg-muted/30">
-              <CardContent className="pt-4 pb-3 text-center">
-                <div className="text-2xl font-bold text-primary">{account.债券类别.length}</div>
-                <div className="text-xs text-muted-foreground">债券类别数</div>
-              </CardContent>
-            </Card>
           </div>
-          {account.债券类别.length > 0 && (
-            <div>
-              <h4 className="text-sm font-semibold mb-2">债券类别分析</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {account.债券类别.map((cat) => (
-                  <Card key={cat.类别} className="bg-muted/30">
-                    <CardContent className="pt-4 pb-3">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="font-semibold text-sm">{cat.类别}</span>
-                        {cat.平均期限 !== undefined && <Badge variant="outline" className="text-xs">平均期限 {cat.平均期限} 年</Badge>}
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 text-xs mb-2">
-                        <div><div className="text-muted-foreground">买入</div><div className="font-mono font-medium text-green-600">{cat.买入金额.toFixed(4)}</div></div>
-                        <div><div className="text-muted-foreground">卖出</div><div className="font-mono font-medium text-red-500">{cat.卖出金额.toFixed(4)}</div></div>
-                        <div><div className="text-muted-foreground">净买卖</div><div className={`font-mono font-medium ${cat.净买卖 >= 0 ? 'text-green-600' : 'text-red-500'}`}>{cat.净买卖.toFixed(4)}</div></div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+        )}
+        {detail.基金分析 && (
+          <div className="bg-blue-50 rounded p-2 text-sm">
+            <div className="font-semibold text-blue-700">基金分析</div>
+            <div className="grid grid-cols-2 gap-2 text-xs mt-1">
+              <div>买入: {detail.基金分析.买入金额}亿 ({detail.基金分析.买入笔数}笔)</div>
+              <div>卖出: {detail.基金分析.卖出金额}亿 ({detail.基金分析.卖出笔数}笔)</div>
             </div>
-          )}
-          {account.基金分析 && (
-            <div>
-              <h4 className="text-sm font-semibold mb-2">基金交易分析</h4>
-              <Card className="bg-muted/30">
-                <CardContent className="pt-4 pb-3">
-                  <div className="grid grid-cols-2 gap-4 text-xs">
-                    <div>买入: <span className="font-mono text-green-600">{account.基金分析.买入金额.toFixed(4)} 亿元 ({account.基金分析.买入笔数}笔)</span></div>
-                    <div>卖出: <span className="font-mono text-red-500">{account.基金分析.卖出金额.toFixed(4)} 亿元 ({account.基金分析.卖出笔数}笔)</span></div>
-                  </div>
-                </CardContent>
-              </Card>
+            {detail.基金分析.涉及基金.length > 0 && <div className="mt-1 text-xs text-muted-foreground">涉及: {detail.基金分析.涉及基金.join(', ')}</div>}
+          </div>
+        )}
+        {detail.转债分析 && (
+          <div className="bg-amber-50 rounded p-2 text-sm">
+            <div className="font-semibold text-amber-700">可转债分析</div>
+            <div className="grid grid-cols-2 gap-2 text-xs mt-1">
+              <div>买入: {detail.转债分析.买入金额}亿 ({detail.转债分析.买入笔数}笔)</div>
+              <div>卖出: {detail.转债分析.卖出金额}亿 ({detail.转债分析.卖出笔数}笔)</div>
             </div>
-          )}
-          {account.转债分析 && (
-            <div>
-              <h4 className="text-sm font-semibold mb-2">可转债交易分析</h4>
-              <Card className="bg-muted/30">
-                <CardContent className="pt-4 pb-3">
-                  <div className="grid grid-cols-2 gap-4 text-xs">
-                    <div>买入: <span className="font-mono text-green-600">{account.转债分析.买入金额.toFixed(4)} 亿元 ({account.转债分析.买入笔数}笔)</span></div>
-                    <div>卖出: <span className="font-mono text-red-500">{account.转债分析.卖出金额.toFixed(4)} 亿元 ({account.转债分析.卖出笔数}笔)</span></div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-          {account.期货分析 && (
-            <div>
-              <h4 className="text-sm font-semibold mb-2">国债期货交易分析</h4>
-              <Card className="bg-muted/30">
-                <CardContent className="pt-4 pb-3">
-                  <div className="grid grid-cols-2 gap-4 text-xs">
-                    <div>交易笔数: <span className="font-mono">{account.期货分析.笔数} 笔</span></div>
-                    <div>总金额: <span className="font-mono">{account.期货分析.总金额.toFixed(4)} 亿元</span></div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+          </div>
+        )}
+        {detail.期货分析 && (
+          <div className="bg-purple-50 rounded p-2 text-sm">
+            <div className="font-semibold text-purple-700">国债期货</div>
+            <div className="text-xs mt-1">{detail.期货分析.笔数}笔, 总金额 {detail.期货分析.总金额}亿</div>
+          </div>
+        )}
+        {Object.keys(detail.买卖方向).length > 0 && (
+          <div className="text-xs text-muted-foreground">方向: {Object.entries(detail.买卖方向).map(([k, v]) => `${k}: ${v}亿`).join(', ')}</div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
+// ============================================================
+// 持仓规模相关子组件
+// ============================================================
+
+function SizeLayerChart({ data }: { data: { 规模档位: string; 账户数: number; 回购占比: number; 债券占比: number; 基金占比: number; 转债占比: number; 期货占比: number; 长期债券占比: number }[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={300}>
+      <BarChart data={data}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="规模档位" tick={{ fontSize: 11 }} />
+        <YAxis />
+        <Tooltip />
+        <Legend />
+        <Bar dataKey="回购占比" stackId="a" fill="#3b82f6" />
+        <Bar dataKey="债券占比" stackId="a" fill="#10b981" />
+        <Bar dataKey="基金占比" stackId="a" fill="#f59e0b" />
+        <Bar dataKey="转债占比" stackId="a" fill="#ef4444" />
+        <Bar dataKey="期货占比" stackId="a" fill="#8b5cf6" />
+        <Bar dataKey="长期债券占比" stackId="a" fill="#06b6d4" />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function PositionTimeSeriesChart({ data, selectedAccount }: { data: PositionTimeSeries[]; selectedAccount?: string }) {
+  const displayData = selectedAccount
+    ? data.filter(d => d.账户代码 === selectedAccount)
+    : data.slice(0, 5);
+
+  if (displayData.length === 0) return <div className="text-muted-foreground text-sm">无时间序列数据</div>;
+
+  const allDates = Array.from(new Set(displayData.flatMap(d => d.数据.map(p => p.日期)))).sort();
+
+  const chartData = allDates.map(date => {
+    const point: Record<string, number | string> = { 日期: date };
+    for (const acct of displayData) {
+      const record = acct.数据.find(p => p.日期 === date);
+      point[`${acct.账户名称}_规模`] = record ? record.账户规模 : 0;
+    }
+    return point;
+  });
+
+  const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
+
+  return (
+    <ResponsiveContainer width="100%" height={350}>
+      <LineChart data={chartData}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="日期" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" height={50} />
+        <YAxis label={{ value: '规模(亿)', angle: -90, position: 'insideLeft', fontSize: 10 }} />
+        <Tooltip />
+        <Legend />
+        {displayData.map((acct, i) => (
+          <Line
+            key={acct.账户代码}
+            type="monotone"
+            dataKey={`${acct.账户名称}_规模`}
+            stroke={colors[i % colors.length]}
+            strokeWidth={2}
+            dot={false}
+          />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+function PositionNavTimeSeriesChart({ data, selectedAccount }: { data: PositionTimeSeries[]; selectedAccount?: string }) {
+  const displayData = selectedAccount
+    ? data.filter(d => d.账户代码 === selectedAccount)
+    : data.slice(0, 5).filter(d => d.数据.some(p => p.累计单位净值 !== undefined));
+
+  if (displayData.length === 0) return <div className="text-muted-foreground text-sm">无净值时间序列数据</div>;
+
+  const allDates = Array.from(new Set(displayData.flatMap(d => d.数据.filter(p => p.累计单位净值 !== undefined).map(p => p.日期)))).sort();
+
+  const chartData = allDates.map(date => {
+    const point: Record<string, number | string> = { 日期: date };
+    for (const acct of displayData) {
+      const record = acct.数据.find(p => p.日期 === date);
+      point[`${acct.账户名称}_净值`] = record && record.累计单位净值 !== undefined ? record.累计单位净值 : 0;
+    }
+    return point;
+  });
+
+  const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
+
+  return (
+    <ResponsiveContainer width="100%" height={300}>
+      <LineChart data={chartData}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="日期" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" height={50} />
+        <YAxis domain={['auto', 'auto']} label={{ value: '单位净值', angle: -90, position: 'insideLeft', fontSize: 10 }} />
+        <Tooltip />
+        <Legend />
+        {displayData.map((acct, i) => (
+          <Line
+            key={acct.账户代码}
+            type="monotone"
+            dataKey={`${acct.账户名称}_净值`}
+            stroke={colors[i % colors.length]}
+            strokeWidth={2}
+            dot={false}
+          />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+
+// ============================================================
+// 主页面组件
+// ============================================================
 
 export default function Home() {
+  const [_file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [fileName, setFileName] = useState<string>('');
-  const [activeTab, setActiveTab] = useState('hg');
+  const [searchCode, setSearchCode] = useState('');
+  const [compareCodes, setCompareCodes] = useState<string[]>([]);
+  const [showCompare, setShowCompare] = useState(false);
+  const [selectedPositionAccount, setSelectedPositionAccount] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [selectedAccount, setSelectedAccount] = useState<string>('');
-  const searchRef = useRef<HTMLDivElement>(null);
-
-  const [compareCodes, setCompareCodes] = useState<string[]>(['', '', '']);
-
-  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
     setLoading(true);
     setError(null);
-    setFileName(file.name);
+    setResult(null);
     try {
-      const { hg, zq } = await parseExcel(file);
-      const analysis = runAnalysis(hg, zq);
-      setResult(analysis);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '解析失败');
+      const { hg, zq, position } = await parseExcel(f);
+      const res = runAnalysis(hg, zq, position);
+      setResult(res);
+    } catch (err: any) {
+      setError(err.message || '解析失败，请检查文件格式');
     } finally {
       setLoading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }, []);
 
-  const triggerFileSelect = () => fileInputRef.current?.click();
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const f = e.dataTransfer.files[0];
+    if (f && fileInputRef.current) {
+      const dt = new DataTransfer();
+      dt.items.add(f);
+      fileInputRef.current.files = dt.files;
+      handleFileChange({ target: fileInputRef.current } as any);
+    }
+  }, [handleFileChange]);
 
-  const searchResults = useMemo(() => {
-    if (!result || !searchQuery.trim()) return [];
-    const q = searchQuery.trim().toLowerCase();
-    return result.accountList
-      .filter(a => a.账户代码.toLowerCase().includes(q) || a.账户名称.toLowerCase().includes(q))
-      .slice(0, 10);
-  }, [result, searchQuery]);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-        setSearchOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const radarData = useMemo(() => {
-    if (!result) return [];
-    const dims = ['回购活跃度', '债券活跃度', '基金活跃度', '期货活跃度', '长期债券偏好', '交易频次'];
-    return dims.map(dim => {
-      const row: Record<string, string | number> = { subject: dim };
-      for (const acct of result.radarAccounts) {
-        row[acct.账户名称] = acct[dim as keyof typeof acct] as number;
-      }
-      return row;
-    });
-  }, [result]);
-
-  const radarColors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#f97316', '#84cc16', '#ef4444', '#6366f1'];
+  const searchedAccount = useMemo(() => {
+    if (!result || !searchCode) return null;
+    return result.allAccountsDetail[searchCode] || null;
+  }, [result, searchCode]);
 
   const compareAccounts = useMemo(() => {
     if (!result) return [];
-    return compareCodes
-      .filter(c => c && result.allAccountsDetail[c])
-      .map(c => result.allAccountsDetail[c]);
+    return compareCodes.map(c => result.allAccountsDetail[c]).filter(Boolean);
   }, [result, compareCodes]);
 
-  return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 shrink-0">
-            <BarChart3 className="w-7 h-7 text-primary" />
-            <div>
-              <h1 className="text-xl font-bold">交易数据分析平台</h1>
-              <p className="text-xs text-muted-foreground">回购业务 · 债券业务 · 深度账户画像</p>
-            </div>
+  const toggleCompare = useCallback((code: string) => {
+    setCompareCodes(prev => {
+      if (prev.includes(code)) return prev.filter(c => c !== code);
+      if (prev.length >= 3) return prev;
+      return [...prev, code];
+    });
+  }, []);
+
+  if (!result) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4"
+        onDragOver={(e) => e.preventDefault()} onDrop={handleDrop}>
+        <div className="max-w-xl w-full">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-slate-800 mb-2">交易数据分析平台</h1>
+            <p className="text-slate-500">上传 Excel 文件，自动分析回购、债券、基金、持仓规模等多维数据</p>
           </div>
-
-          {result && (
-            <div className="relative flex-1 max-w-md" ref={searchRef}>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="搜索账户代码或名称..."
-                  className="pl-9 pr-8"
-                  value={searchQuery}
-                  onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(!!e.target.value); }}
-                  onFocus={() => searchQuery && setSearchOpen(true)}
-                />
-                {searchQuery && (
-                  <button className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setSearchQuery(''); setSearchOpen(false); }}>
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-              {searchOpen && searchResults.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg z-50 max-h-64 overflow-y-auto">
-                  {searchResults.map(a => (
-                    <button
-                      key={a.账户代码}
-                      className="w-full text-left px-3 py-2 hover:bg-muted text-sm flex items-center justify-between"
-                      onClick={() => { setSelectedAccount(a.账户代码); setSearchOpen(false); setSearchQuery(''); }}
-                    >
-                      <span><span className="font-medium">{a.账户名称}</span><span className="text-muted-foreground font-mono text-xs ml-2">{a.账户代码}</span></span>
-                      <Badge variant="secondary" className="text-xs">{a.总笔数}笔</Badge>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="flex items-center gap-2 shrink-0">
-            {fileName && <Badge variant="outline" className="text-xs hidden md:inline-flex"><FileText className="w-3 h-3 mr-1" />{fileName}</Badge>}
-            {result && (
-              <>
-                <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFileUpload} style={{ display: 'none' }} />
-                <Button variant="outline" size="sm" onClick={triggerFileSelect}><Upload className="w-4 h-4 mr-1" /> 重新上传</Button>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        {!result && (
-          <Card className="border-dashed border-2">
-            <CardContent className="pt-8 pb-8">
-              <div className="flex flex-col items-center justify-center text-center space-y-4">
-                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center"><Upload className="w-8 h-8 text-primary" /></div>
-                <div>
-                  <h3 className="text-lg font-semibold">上传交易流水Excel文件</h3>
-                  <p className="text-sm text-muted-foreground mt-1">支持包含「回购业务」和「债券和其他业务」两个Sheet的Excel文件 · 数据仅在本地分析不上传服务器</p>
-                </div>
-                <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFileUpload} style={{ display: 'none' }} />
-                <Button disabled={loading} onClick={triggerFileSelect}>{loading ? '分析中...' : '选择文件'}</Button>
-                {error && <div className="text-sm text-red-500 bg-red-50 px-4 py-2 rounded-md">{error}</div>}
-              </div>
+          <Card className="border-2 border-dashed border-slate-300 hover:border-blue-400 transition-colors cursor-pointer"
+            onClick={() => fileInputRef.current?.click()}>
+            <CardContent className="p-12 text-center">
+              <Upload className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+              <p className="text-lg font-medium text-slate-700 mb-2">点击或拖拽上传 Excel 文件</p>
+              <p className="text-sm text-slate-400">支持 .xlsx 格式，需包含「回购」「债券/其他」「持仓规模」三个 Sheet</p>
+              <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileChange} />
             </CardContent>
           </Card>
-        )}
-
-        {result && (
-          <>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card><CardContent className="pt-5 pb-3"><div className="text-2xl font-bold text-primary">{result.totalHgRecords}</div><div className="text-xs text-muted-foreground">回购业务记录</div></CardContent></Card>
-              <Card><CardContent className="pt-5 pb-3"><div className="text-2xl font-bold text-primary">{result.totalZqRecords}</div><div className="text-xs text-muted-foreground">债券及其他记录</div></CardContent></Card>
-              <Card><CardContent className="pt-5 pb-3"><div className="text-2xl font-bold text-primary">{result.totalAccounts}</div><div className="text-xs text-muted-foreground">涉及账户总数</div></CardContent></Card>
-              <Card><CardContent className="pt-5 pb-3"><div className="text-2xl font-bold text-primary">{result.lowActivityAccounts.length}</div><div className="text-xs text-muted-foreground">低活跃度账户(≤2笔)</div></CardContent></Card>
+          {loading && (
+            <div className="text-center mt-6">
+              <div className="inline-block w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm text-slate-500 mt-2">正在分析数据...</p>
             </div>
+          )}
+          {error && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+              <AlertTriangle className="w-4 h-4 inline mr-2" />{error}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
-            <AccountSearchDialog open={!!selectedAccount} onClose={() => setSelectedAccount('')} accountCode={selectedAccount} allAccountsDetail={result.allAccountsDetail} />
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-              <ScrollArea className="w-full whitespace-nowrap">
-                <TabsList className="inline-flex h-auto gap-1 flex-wrap">
-                  <TabsTrigger value="hg">回购业务</TabsTrigger>
-                  <TabsTrigger value="xyhg">协议回购</TabsTrigger>
-                  <TabsTrigger value="longterm">长期债券</TabsTrigger>
-                  <TabsTrigger value="fund">基金</TabsTrigger>
-                  <TabsTrigger value="zhaiquan">可转债</TabsTrigger>
-                  <TabsTrigger value="qh">国债期货</TabsTrigger>
-                  <TabsTrigger value="trend"><TrendingUp className="w-3 h-3 mr-1" />趋势分析</TabsTrigger>
-                  <TabsTrigger value="heatmap"><Thermometer className="w-3 h-3 mr-1" />热力图</TabsTrigger>
-                  <TabsTrigger value="radar"><RadarIcon className="w-3 h-3 mr-1" />雷达画像</TabsTrigger>
-                  <TabsTrigger value="term"><Clock className="w-3 h-3 mr-1" />期限结构</TabsTrigger>
-                  <TabsTrigger value="compare"><GitCompare className="w-3 h-3 mr-1" />账户对比</TabsTrigger>
-                  <TabsTrigger value="anomaly"><Zap className="w-3 h-3 mr-1" />异常检测</TabsTrigger>
-                  <TabsTrigger value="low">低活跃度</TabsTrigger>
-                  <TabsTrigger value="special">ABS/REITs</TabsTrigger>
-                </TabsList>
-              </ScrollArea>
+  return (
+    <div className="min-h-screen bg-slate-50">
+      {/* Header */}
+      <div className="bg-white border-b sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <BarChart3 className="w-6 h-6 text-blue-600" />
+            <h1 className="text-lg font-bold">交易数据分析平台</h1>
+            <Badge variant="secondary" className="text-xs">
+              {result.totalHgRecords + result.totalZqRecords} 笔交易 / {result.totalAccounts} 个账户
+              {result.totalPositionRecords > 0 && ` / ${result.positionAccounts} 个有持仓数据`}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-2">
+            <Input placeholder="搜索账户代码..." value={searchCode} onChange={e => setSearchCode(e.target.value)}
+              className="w-48 text-sm h-8" />
+            {searchCode && (
+              <Button variant="ghost" size="sm" onClick={() => setSearchCode('')}><X className="w-4 h-4" /></Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => { setResult(null); setFile(null); setSearchCode(''); setCompareCodes([]); }}>
+              <Upload className="w-4 h-4 mr-1" />重新上传
+            </Button>
+          </div>
+        </div>
+      </div>
 
-              <TabsContent value="hg" className="space-y-4">
-                <Top10Section title="回购业务总体" byValue={result.hgTop10ByValue} byCount={result.hgTop10ByCount} color="#3b82f6" />
-              </TabsContent>
+      {/* Search Result */}
+      {searchedAccount && (
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold flex items-center gap-2">
+              <Search className="w-4 h-4" />搜索结果: {searchedAccount.账户名称}
+            </h2>
+            <Button variant="outline" size="sm" onClick={() => toggleCompare(searchedAccount.账户代码)}>
+              {compareCodes.includes(searchedAccount.账户代码) ? '已加入对比' : '加入对比'}
+            </Button>
+          </div>
+          <AccountDetailCard detail={searchedAccount} />
+        </div>
+      )}
 
-              <TabsContent value="xyhg" className="space-y-4">
-                <Top10Section title="协议回购" byValue={result.xyhgTop10ByValue} byCount={result.xyhgTop10ByCount} color="#10b981" />
-                <Card>
-                  <CardHeader><CardTitle className="text-base">协议回购账户特征</CardTitle></CardHeader>
-                  <CardContent>
-                    <Accordion type="single" collapsible className="w-full">
-                      {result.xyhgAccounts.map((acct, i) => (
-                        <AccordionItem key={acct.账户代码} value={`xyhg-${i}`}>
-                          <AccordionTrigger className="text-sm hover:no-underline">
-                            <div className="flex items-center gap-3 text-left w-full pr-4">
-                              <Badge variant="outline">{i + 1}</Badge>
-                              <span className="font-semibold">{acct.账户名称}</span>
-                              <Badge variant="secondary" className="ml-auto text-xs">{acct.协议回购金额.toFixed(4)} 亿元</Badge>
-                            </div>
-                          </AccordionTrigger>
-                          <AccordionContent>
-                            <div className="space-y-3 pl-4 pb-2">
-                              <div className="text-sm"><span className="text-muted-foreground">协议回购笔数:</span> <span className="font-mono">{acct.协议回购笔数} 笔</span></div>
-                              <div className="text-sm"><span className="text-muted-foreground">全部回购类型分布:</span><div className="flex flex-wrap gap-1 mt-1">{Object.entries(acct.全部回购类型).map(([k, v]) => <Badge key={k} variant="secondary" className="text-xs">{k}: {v}</Badge>)}</div></div>
-                              <div className="text-sm"><span className="text-muted-foreground">交易方向分布:</span><div className="flex flex-wrap gap-1 mt-1">{Object.entries(acct.交易方向分布).map(([k, v]) => <Badge key={k} variant="outline" className="text-xs">{k}: {v}</Badge>)}</div></div>
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
+      {/* Compare */}
+      {compareCodes.length > 0 && (
+        <div className="max-w-7xl mx-auto px-4 py-2">
+          <div className="flex items-center gap-2 mb-2">
+            <GitCompare className="w-4 h-4" />
+            <span className="text-sm font-semibold">对比账户 ({compareCodes.length}/3):</span>
+            {compareCodes.map(c => (
+              <Badge key={c} variant="secondary" className="cursor-pointer" onClick={() => toggleCompare(c)}>
+                {c} <X className="w-3 h-3 ml-1" />
+              </Badge>
+            ))}
+            <Button variant="ghost" size="sm" onClick={() => setShowCompare(!showCompare)}>
+              {showCompare ? '收起' : '展开'}
+            </Button>
+          </div>
+          {showCompare && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {compareAccounts.map(a => <AccountDetailCard key={a.账户代码} detail={a} />)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Main Tabs */}
+      <div className="max-w-7xl mx-auto px-4 py-4">
+        <Tabs defaultValue="overview" className="space-y-4">
+          <TabsList className="flex-wrap h-auto">
+            <TabsTrigger value="overview"><Activity className="w-3 h-3 mr-1" />概览</TabsTrigger>
+            <TabsTrigger value="hg"><TrendingUp className="w-3 h-3 mr-1" />回购业务</TabsTrigger>
+            <TabsTrigger value="bond"><BarChart3 className="w-3 h-3 mr-1" />债券分析</TabsTrigger>
+            <TabsTrigger value="fund"><Package className="w-3 h-3 mr-1" />基金/转债/期货</TabsTrigger>
+            <TabsTrigger value="low"><AlertTriangle className="w-3 h-3 mr-1" />低活跃度</TabsTrigger>
+            <TabsTrigger value="special"><FileText className="w-3 h-3 mr-1" />特殊品种</TabsTrigger>
+            {result.totalPositionRecords > 0 && (
+              <TabsTrigger value="position"><Wallet className="w-3 h-3 mr-1" />持仓规模</TabsTrigger>
+            )}
+            <TabsTrigger value="viz"><Thermometer className="w-3 h-3 mr-1" />可视化</TabsTrigger>
+          </TabsList>
+
+          {/* Overview */}
+          <TabsContent value="overview" className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <StatCard title="回购交易" value={`${result.totalHgRecords.toLocaleString()} 笔`} subtitle={`${result.hgAccounts} 个账户`} icon={TrendingUp} />
+              <StatCard title="债券交易" value={`${result.totalZqRecords.toLocaleString()} 笔`} subtitle={`${result.zqAccounts} 个账户`} icon={BarChart3} color="green" />
+              <StatCard title="总账户数" value={result.totalAccounts.toLocaleString()} icon={Activity} color="purple" />
+              <StatCard title="异常交易" value={result.anomalies.length.toString()} subtitle="已标红提示" icon={AlertTriangle} color="red" />
+            </div>
+            {result.totalPositionRecords > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <StatCard title="持仓账户" value={`${result.positionOverview.有规模数据的账户数} 个`} icon={Wallet} color="cyan" />
+                <StatCard title="总持仓规模" value={`${result.positionOverview.总持仓规模} 亿`} icon={Scale} color="amber" />
+                <StatCard title="平均规模" value={`${result.positionOverview.平均账户规模} 亿`} icon={Scale} color="amber" />
+                <StatCard title="平均净值" value={result.positionOverview.平均单位净值} subtitle={`${result.positionOverview.有净值数据的账户数} 个有数据`} icon={TrendingUp} color="green" />
+              </div>
+            )}
+            <Top10Section title="回购业务 Top10" byValue={result.hgTop10ByValue} byCount={result.hgTop10ByCount} color="#3b82f6" />
+            <Top10Section title="长期债券(10年+) Top10" byValue={result.longTermTop10ByValue} byCount={result.longTermTop10ByCount} color="#10b981" />
+            <Top10Section title="基金 Top10" byValue={result.fundTop10ByValue} byCount={result.fundTop10ByCount} color="#f59e0b" />
+            <Top10Section title="可转债 Top10" byValue={result.zhaiquanTop10ByValue} byCount={result.zhaiquanTop10ByCount} color="#ef4444" />
+            {result.totalPositionRecords > 0 && result.turnoverTop10.length > 0 && (
+              <Card>
+                <CardHeader><CardTitle className="text-sm">换手率 Top10（最活跃）</CardTitle></CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader><TableRow><TableHead>排名</TableHead><TableHead>账户代码</TableHead><TableHead>账户名称</TableHead><TableHead>换手率</TableHead><TableHead>规模(亿)</TableHead><TableHead>交易金额(亿)</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {result.turnoverTop10.map(item => (
+                        <TableRow key={item.账户代码}>
+                          <TableCell>{item.排名}</TableCell>
+                          <TableCell className="font-mono text-xs">{item.账户代码}</TableCell>
+                          <TableCell>{item.账户名称}</TableCell>
+                          <TableCell className="text-right font-mono text-red-600">{item.换手率}x</TableCell>
+                          <TableCell className="text-right font-mono">{item.账户规模}</TableCell>
+                          <TableCell className="text-right font-mono">{item.交易总金额}</TableCell>
+                        </TableRow>
                       ))}
-                    </Accordion>
-                  </CardContent>
-                </Card>
-              </TabsContent>
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
 
-              <TabsContent value="longterm" className="space-y-4">
-                <Top10Section title="长期债券(10-30年、30年以上)" byValue={result.longTermTop10ByValue} byCount={result.longTermTop10ByCount} color="#f59e0b" />
-                <Card>
-                  <CardHeader><CardTitle className="text-base">长期债券账户深度画像</CardTitle></CardHeader>
-                  <CardContent>
-                    <Accordion type="single" collapsible className="w-full">
-                      {result.longTermAccounts.map((acct, i) => <AccountDetailCard key={acct.账户代码} account={acct} index={i} />)}
-                    </Accordion>
-                  </CardContent>
-                </Card>
-              </TabsContent>
+          {/* 回购 */}
+          <TabsContent value="hg" className="space-y-4">
+            <Top10Section title="回购业务 Top10（已过滤单笔超100亿）" byValue={result.hgTop10ByValue} byCount={result.hgTop10ByCount} color="#3b82f6" />
+            <Top10Section title="协议回购 Top10" byValue={result.xyhgTop10ByValue} byCount={result.xyhgTop10ByCount} color="#8b5cf6" />
+            <Card><CardHeader><CardTitle className="text-sm">协议回购账户画像（Top5）</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                {result.xyhgAccounts.map(acct => (
+                  <div key={acct.账户代码} className="bg-slate-50 rounded p-3">
+                    <div className="font-semibold text-sm">{acct.账户名称} <span className="text-xs text-muted-foreground font-mono">({acct.账户代码})</span></div>
+                    <div className="grid grid-cols-3 gap-2 text-xs mt-1">
+                      <div>协议回购: {acct.协议回购金额}亿 ({acct.协议回购笔数}笔)</div>
+                      <div>回购类型: {Object.entries(acct.全部回购类型).map(([k, v]) => `${k}(${v})`).join(', ')}</div>
+                      <div>方向: {Object.entries(acct.交易方向分布).map(([k, v]) => `${k}(${v})`).join(', ')}</div>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-              <TabsContent value="fund" className="space-y-4">
-                <Top10Section title="基金买卖" byValue={result.fundTop10ByValue} byCount={result.fundTop10ByCount} color="#8b5cf6" />
-                <Card>
-                  <CardHeader><CardTitle className="text-base">基金交易账户深度画像</CardTitle></CardHeader>
-                  <CardContent>
-                    <Accordion type="single" collapsible className="w-full">
-                      {result.fundAccounts.map((acct, i) => <AccountDetailCard key={acct.账户代码} account={acct} index={i} />)}
-                    </Accordion>
-                  </CardContent>
-                </Card>
-              </TabsContent>
+          {/* 债券 */}
+          <TabsContent value="bond" className="space-y-4">
+            <Top10Section title="长期债券(10年+) Top10" byValue={result.longTermTop10ByValue} byCount={result.longTermTop10ByCount} color="#10b981" />
+            <Card><CardHeader><CardTitle className="text-sm">长期债券账户深度分析（Top5）</CardTitle></CardHeader>
+              <CardContent>
+                <Accordion type="multiple" className="w-full">
+                  {result.longTermAccounts.map(acct => (
+                    <AccordionItem key={acct.账户代码} value={acct.账户代码}>
+                      <AccordionTrigger className="text-sm">{acct.账户名称} ({acct.账户代码}) - {acct.总笔数}笔</AccordionTrigger>
+                      <AccordionContent><AccountDetailCard detail={acct} /></AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-              <TabsContent value="zhaiquan" className="space-y-4">
-                <Top10Section title="可转债交易" byValue={result.zhaiquanTop10ByValue} byCount={result.zhaiquanTop10ByCount} color="#ec4899" />
-                <Card>
-                  <CardHeader><CardTitle className="text-base">可转债交易账户深度画像</CardTitle></CardHeader>
-                  <CardContent>
-                    <Accordion type="single" collapsible className="w-full">
-                      {result.zhaiquanAccounts.map((acct, i) => <AccountDetailCard key={acct.账户代码} account={acct} index={i} />)}
-                    </Accordion>
-                  </CardContent>
-                </Card>
-              </TabsContent>
+          {/* 基金/转债/期货 */}
+          <TabsContent value="fund" className="space-y-4">
+            <Top10Section title="基金 Top10" byValue={result.fundTop10ByValue} byCount={result.fundTop10ByCount} color="#f59e0b" />
+            <Top10Section title="可转债 Top10" byValue={result.zhaiquanTop10ByValue} byCount={result.zhaiquanTop10ByCount} color="#ef4444" />
+            <Top10Section title="国债期货 Top10" byValue={result.qhTop10ByValue} byCount={result.qhTop10ByCount} color="#8b5cf6" />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card><CardHeader><CardTitle className="text-sm">基金账户分析（Top5）</CardTitle></CardHeader>
+                <CardContent><Accordion type="multiple">{result.fundAccounts.map(acct => (
+                  <AccordionItem key={acct.账户代码} value={acct.账户代码}>
+                    <AccordionTrigger className="text-sm">{acct.账户名称}</AccordionTrigger>
+                    <AccordionContent><AccountDetailCard detail={acct} /></AccordionContent>
+                  </AccordionItem>))}</Accordion></CardContent>
+              </Card>
+              <Card><CardHeader><CardTitle className="text-sm">可转债账户分析（Top5）</CardTitle></CardHeader>
+                <CardContent><Accordion type="multiple">{result.zhaiquanAccounts.map(acct => (
+                  <AccordionItem key={acct.账户代码} value={acct.账户代码}>
+                    <AccordionTrigger className="text-sm">{acct.账户名称}</AccordionTrigger>
+                    <AccordionContent><AccountDetailCard detail={acct} /></AccordionContent>
+                  </AccordionItem>))}</Accordion></CardContent>
+              </Card>
+            </div>
+          </TabsContent>
 
-              <TabsContent value="qh" className="space-y-4">
-                <Top10Section title="国债期货交易" byValue={result.qhTop10ByValue} byCount={result.qhTop10ByCount} color="#06b6d4" />
-                <Card>
-                  <CardHeader><CardTitle className="text-base">国债期货交易账户深度画像</CardTitle></CardHeader>
-                  <CardContent>
-                    <Accordion type="single" collapsible className="w-full">
-                      {result.qhAccounts.map((acct, i) => <AccountDetailCard key={acct.账户代码} account={acct} index={i} />)}
-                    </Accordion>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="low" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-500" /> 低活跃度账户（交易笔数≤2笔，无金额限制）
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-sm text-muted-foreground mb-4">共计 {result.lowActivityAccounts.length} 个账户</div>
-                    <Accordion type="single" collapsible className="w-full">
-                      {result.lowActivityAccounts.map((acct, i) => (
-                        <AccordionItem key={acct.账户代码} value={`low-${i}`}>
-                          <AccordionTrigger className="text-sm hover:no-underline">
-                            <div className="flex items-center gap-3 text-left w-full pr-4">
-                              <Badge variant="outline">{i + 1}</Badge>
-                              <span className="font-semibold">{acct.账户名称}</span>
-                              <span className="text-xs text-muted-foreground font-mono">{acct.账户代码}</span>
-                              <Badge variant="secondary" className="ml-auto text-xs">{acct.总交易笔数} 笔</Badge>
-                            </div>
-                          </AccordionTrigger>
-                          <AccordionContent>
-                            <div className="space-y-3 pl-4 pb-2">
-                              <div className="text-sm"><span className="text-muted-foreground">总交易金额:</span> <span className="font-mono">{acct.总交易金额.toFixed(4)} 亿元</span></div>
-                              {acct.持有品种.length > 0 && (
-                                <div className="text-sm">
-                                  <span className="text-muted-foreground">交易/持有品种:</span>
-                                  <div className="flex flex-wrap gap-1 mt-1">{acct.持有品种.map(h => <Badge key={h} variant="secondary" className="text-xs">{h}</Badge>)}</div>
-                                </div>
-                              )}
-                              <div className="text-sm">
-                                <span className="text-muted-foreground">交易明细:</span>
-                                <div className="mt-1 space-y-1">
-                                  {acct.交易明细.map((d, j) => (
-                                    <div key={j} className="text-xs bg-muted/50 px-2 py-1 rounded">[{d.业务品种}] {d.交易方向} {d.名称} | {d.金额.toFixed(4)} 亿元</div>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
+          {/* 低活跃度 */}
+          <TabsContent value="low" className="space-y-4">
+            <Card><CardHeader><CardTitle className="text-sm">低活跃度账户（交易笔数 ≤ 2）</CardTitle></CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground mb-2">共 {result.lowActivityAccounts.length} 个账户</p>
+                <ScrollArea className="h-[500px]">
+                  <Table>
+                    <TableHeader><TableRow><TableHead>账户代码</TableHead><TableHead>账户名称</TableHead><TableHead>笔数</TableHead><TableHead>金额(亿)</TableHead><TableHead>持有品种</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {result.lowActivityAccounts.map(acct => (
+                        <TableRow key={acct.账户代码}>
+                          <TableCell className="font-mono text-xs">{acct.账户代码}</TableCell>
+                          <TableCell>{acct.账户名称}</TableCell>
+                          <TableCell>{acct.总交易笔数}</TableCell>
+                          <TableCell className="font-mono">{acct.总交易金额}</TableCell>
+                          <TableCell className="text-xs">{acct.持有品种.join(', ')}</TableCell>
+                        </TableRow>
                       ))}
-                    </Accordion>
-                  </CardContent>
-                </Card>
-                {result.zeroTradeAccounts.length > 0 && (
-                  <Card>
-                    <CardHeader><CardTitle className="text-base">无交易账户</CardTitle></CardHeader>
-                    <CardContent>
-                      <div className="flex flex-wrap gap-2">{result.zeroTradeAccounts.map(acct => <Badge key={acct.账户代码} variant="outline">{acct.账户名称} ({acct.账户代码})</Badge>)}</div>
-                    </CardContent>
-                  </Card>
-                )}
-              </TabsContent>
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+            {result.zeroTradeAccounts.length > 0 && (
+              <Card><CardHeader><CardTitle className="text-sm">零交易账户</CardTitle></CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader><TableRow><TableHead>账户代码</TableHead><TableHead>账户名称</TableHead></TableRow></TableHeader>
+                    <TableBody>{result.zeroTradeAccounts.map(a => (
+                      <TableRow key={a.账户代码}><TableCell className="font-mono text-xs">{a.账户代码}</TableCell><TableCell>{a.账户名称}</TableCell></TableRow>
+                    ))}</TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
 
-              <TabsContent value="special" className="space-y-4">
-                <Top10Section title="ABS（资产支持证券）" byValue={result.absTop10ByValue} byCount={result.absTop10ByCount} color="#84cc16" />
-                <Top10Section title="REITs" byValue={result.reitsTop10ByValue} byCount={result.reitsTop10ByCount} color="#f97316" />
+          {/* 特殊品种 */}
+          <TabsContent value="special" className="space-y-4">
+            <Top10Section title="ABS Top10" byValue={result.absTop10ByValue} byCount={result.absTop10ByCount} color="#06b6d4" />
+            <Top10Section title="REITs Top10" byValue={result.reitsTop10ByValue} byCount={result.reitsTop10ByCount} color="#ec4899" />
+            <Card><CardHeader><CardTitle className="text-sm">特殊业务品种</CardTitle></CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader><TableRow><TableHead>排名</TableHead><TableHead>账户代码</TableHead><TableHead>账户名称</TableHead><TableHead>业务品种</TableHead><TableHead>金额(亿)</TableHead><TableHead>笔数</TableHead></TableRow></TableHeader>
+                  <TableBody>{result.specialTop10.map(item => (
+                    <TableRow key={`${item.账户代码}-${item.业务品种}`}>
+                      <TableCell>{item.排名}</TableCell><TableCell className="font-mono text-xs">{item.账户代码}</TableCell>
+                      <TableCell>{item.账户名称}</TableCell><TableCell><Badge variant="outline">{item.业务品种}</Badge></TableCell>
+                      <TableCell className="font-mono">{item.金额}</TableCell><TableCell>{item.笔数}</TableCell>
+                    </TableRow>
+                  ))}</TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* 持仓规模（新增） */}
+          {result.totalPositionRecords > 0 && (
+            <TabsContent value="position" className="space-y-4">
+              {/* 概览卡片 */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <StatCard title="持仓账户" value={`${result.positionOverview.有规模数据的账户数} 个`} icon={Wallet} color="cyan" />
+                <StatCard title="总持仓规模" value={`${result.positionOverview.总持仓规模} 亿`} icon={Scale} color="amber" />
+                <StatCard title="平均规模" value={`${result.positionOverview.平均账户规模} 亿`} subtitle={`中位数 ${result.positionOverview.中位数规模} 亿`} icon={Scale} color="amber" />
+                <StatCard title="平均净值" value={result.positionOverview.平均单位净值} subtitle={`${result.positionOverview.有净值数据的账户数} 个有数据`} icon={TrendingUp} color="green" />
+              </div>
+
+              {/* 规模档位统计 */}
+              <Card>
+                <CardHeader><CardTitle className="text-sm">规模档位交易特征</CardTitle></CardHeader>
+                <CardContent>
+                  <SizeLayerChart data={result.sizeLayerStats} />
+                  <Table className="mt-4">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>规模档位</TableHead><TableHead>账户数</TableHead>
+                        <TableHead>总交易(亿)</TableHead><TableHead>总笔数</TableHead>
+                        <TableHead>平均交易(亿)</TableHead><TableHead>回购%</TableHead>
+                        <TableHead>债券%</TableHead><TableHead>基金%</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {result.sizeLayerStats.map(layer => (
+                        <TableRow key={layer.规模档位}>
+                          <TableCell><Badge variant="outline">{layer.规模档位}</Badge></TableCell>
+                          <TableCell>{layer.账户数}</TableCell>
+                          <TableCell className="font-mono">{layer.总交易金额}</TableCell>
+                          <TableCell>{layer.总交易笔数}</TableCell>
+                          <TableCell className="font-mono">{layer.平均交易金额}</TableCell>
+                          <TableCell>{layer.回购占比}%</TableCell>
+                          <TableCell>{layer.债券占比}%</TableCell>
+                          <TableCell>{layer.基金占比}%</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              {/* 换手率 */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2"><Package className="w-4 h-4" /> 其他特殊品种（分销、远期、转托管、债券回售等）</CardTitle>
-                  </CardHeader>
+                  <CardHeader><CardTitle className="text-sm">换手率 Top10（最活跃）</CardTitle></CardHeader>
                   <CardContent>
                     <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>排名</TableHead>
-                          <TableHead className="text-xs">账户代码</TableHead>
-                          <TableHead>账户名称</TableHead>
-                          <TableHead>业务品种</TableHead>
-                          <TableHead className="text-right">金额(亿元)</TableHead>
-                          <TableHead className="text-right">笔数</TableHead>
-                        </TableRow>
-                      </TableHeader>
+                      <TableHeader><TableRow><TableHead>排名</TableHead><TableHead>账户名称</TableHead><TableHead>换手率</TableHead><TableHead>规模(亿)</TableHead></TableRow></TableHeader>
                       <TableBody>
-                        {result.specialTop10.map(item => (
-                          <TableRow key={`${item.账户代码}-${item.业务品种}`}>
-                            <TableCell><Badge variant="outline">{item.排名}</Badge></TableCell>
-                            <TableCell className="text-xs font-mono text-muted-foreground">{item.账户代码}</TableCell>
-                            <TableCell className="text-xs">{item.账户名称}</TableCell>
-                            <TableCell><Badge variant="secondary" className="text-xs">{item.业务品种}</Badge></TableCell>
-                            <TableCell className="text-right font-mono text-xs">{item.金额.toFixed(4)}</TableCell>
-                            <TableCell className="text-right text-xs">{item.笔数}</TableCell>
+                        {result.turnoverTop10.map(item => (
+                          <TableRow key={item.账户代码}>
+                            <TableCell>{item.排名}</TableCell>
+                            <TableCell>{item.账户名称}</TableCell>
+                            <TableCell className="text-right font-mono text-red-600">{item.换手率}x</TableCell>
+                            <TableCell className="text-right font-mono">{item.账户规模}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
                   </CardContent>
                 </Card>
-              </TabsContent>
-
-              {/* ===== 趋势分析 ===== */}
-              <TabsContent value="trend" className="space-y-4">
                 <Card>
-                  <CardHeader><CardTitle className="text-base flex items-center gap-2"><TrendingUp className="w-4 h-4" /> 月度交易趋势</CardTitle></CardHeader>
+                  <CardHeader><CardTitle className="text-sm">换手率倒数 Top10（最"躺平"）</CardTitle></CardHeader>
                   <CardContent>
-                    <div className="h-96">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={result.monthlyTrend} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="月份" />
-                          <YAxis />
-                          <Tooltip formatter={(v: number) => v.toFixed(4)} />
-                          <Legend />
-                          <Area type="monotone" dataKey="回购业务" stackId="1" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} />
-                          <Area type="monotone" dataKey="债券业务" stackId="1" stroke="#10b981" fill="#10b981" fillOpacity={0.3} />
-                          <Area type="monotone" dataKey="基金" stackId="1" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.3} />
-                          <Area type="monotone" dataKey="可转债" stackId="1" stroke="#ec4899" fill="#ec4899" fillOpacity={0.3} />
-                          <Area type="monotone" dataKey="国债期货" stackId="1" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.3} />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm">回购 vs 债券 金额对比</CardTitle></CardHeader>
-                    <CardContent>
-                      <div className="h-72">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <ComposedChart data={result.monthlyTrend}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="月份" fontSize={11} />
-                            <YAxis fontSize={11} />
-                            <Tooltip formatter={(v: number) => v.toFixed(4)} />
-                            <Legend />
-                            <Bar dataKey="回购业务" fill="#3b82f6" name="回购业务" />
-                            <Bar dataKey="债券业务" fill="#10b981" name="债券业务" />
-                            <Line type="monotone" dataKey="基金" stroke="#8b5cf6" name="基金" dot={false} />
-                          </ComposedChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader><CardTitle className="text-sm">衍生品交易趋势（可转债+期货）</CardTitle></CardHeader>
-                    <CardContent>
-                      <div className="h-72">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={result.monthlyTrend}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="月份" fontSize={11} />
-                            <YAxis fontSize={11} />
-                            <Tooltip formatter={(v: number) => v.toFixed(4)} />
-                            <Legend />
-                            <Line type="monotone" dataKey="可转债" stroke="#ec4899" strokeWidth={2} dot />
-                            <Line type="monotone" dataKey="国债期货" stroke="#06b6d4" strokeWidth={2} dot />
-                            <Line type="monotone" dataKey="基金" stroke="#8b5cf6" strokeWidth={2} dot />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </TabsContent>
-
-              {/* ===== 热力图 ===== */}
-              <TabsContent value="heatmap" className="space-y-4">
-                <Card>
-                  <CardHeader><CardTitle className="text-base flex items-center gap-2"><Thermometer className="w-4 h-4" /> 账户月度交易热力图（Top 30 活跃账户）</CardTitle></CardHeader>
-                  <CardContent><HeatmapChart data={result.heatmapData} months={result.heatmapMonths} /></CardContent>
-                </Card>
-              </TabsContent>
-
-              {/* ===== 雷达画像 ===== */}
-              <TabsContent value="radar" className="space-y-4">
-                <Card>
-                  <CardHeader><CardTitle className="text-base flex items-center gap-2"><RadarIcon className="w-4 h-4" /> 账户多维画像雷达图（Top 15 账户）</CardTitle></CardHeader>
-                  <CardContent>
-                    <div className="h-[500px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-                          <PolarGrid />
-                          <PolarAngleAxis dataKey="subject" tick={{ fontSize: 12 }} />
-                          <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 10 }} />
-                          {result.radarAccounts.slice(0, 6).map((acct, i) => (
-                            <Radar key={acct.账户代码} name={acct.账户名称} dataKey={acct.账户名称} stroke={radarColors[i % radarColors.length]} fill={radarColors[i % radarColors.length]} fillOpacity={0.1} strokeWidth={2} />
-                          ))}
-                          <Legend />
-                          <Tooltip />
-                        </RadarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                  {result.radarAccounts.map((acct) => (
-                    <Card key={acct.账户代码} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => setSelectedAccount(acct.账户代码)}>
-                      <CardContent className="pt-4 pb-3">
-                        <div className="text-xs font-medium truncate" title={acct.账户名称}>{acct.账户名称}</div>
-                        <div className="text-[10px] text-muted-foreground font-mono">{acct.账户代码}</div>
-                        <div className="mt-2 space-y-1">
-                          {(['回购活跃度', '债券活跃度', '基金活跃度', '期货活跃度', '长期债券偏好', '交易频次'] as const).map(dim => (
-                            <div key={dim} className="flex items-center gap-1">
-                              <div className="text-[10px] text-muted-foreground w-16 truncate">{dim}</div>
-                              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full" style={{ width: `${acct[dim]}%` }} /></div>
-                              <div className="text-[10px] font-mono w-6 text-right">{acct[dim]}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </TabsContent>
-
-              {/* ===== 期限结构 ===== */}
-              <TabsContent value="term" className="space-y-4">
-                <Card>
-                  <CardHeader><CardTitle className="text-base flex items-center gap-2"><Clock className="w-4 h-4" /> 债券期限结构分布</CardTitle></CardHeader>
-                  <CardContent>
-                    <div className="h-80">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={result.termStructure} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="期限段" />
-                          <YAxis />
-                          <Tooltip formatter={(v: number) => v.toFixed(4)} />
-                          <Legend />
-                          <Bar dataKey="买入金额" fill="#10b981" name="买入金额" radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="卖出金额" fill="#ef4444" name="卖出金额" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader><CardTitle className="text-sm">期限结构净买卖</CardTitle></CardHeader>
-                  <CardContent>
-                    <div className="h-64">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={result.termStructure}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="期限段" fontSize={11} />
-                          <YAxis fontSize={11} />
-                          <Tooltip formatter={(v: number) => v.toFixed(4)} />
-                          <Bar dataKey="净买卖" fill="#3b82f6" name="净买卖" radius={[4, 4, 0, 0]} fillOpacity={0.8} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>期限段</TableHead>
-                      <TableHead className="text-right">买入金额(亿元)</TableHead>
-                      <TableHead className="text-right">卖出金额(亿元)</TableHead>
-                      <TableHead className="text-right">净买卖(亿元)</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {result.termStructure.map(row => (
-                      <TableRow key={row.期限段}>
-                        <TableCell className="font-medium">{row.期限段}</TableCell>
-                        <TableCell className="text-right font-mono text-green-600">{row.买入金额.toFixed(4)}</TableCell>
-                        <TableCell className="text-right font-mono text-red-500">{row.卖出金额.toFixed(4)}</TableCell>
-                        <TableCell className={`text-right font-mono font-medium ${row.净买卖 >= 0 ? 'text-green-600' : 'text-red-500'}`}>{row.净买卖.toFixed(4)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TabsContent>
-
-              {/* ===== 账户对比 ===== */}
-              <TabsContent value="compare" className="space-y-4">
-                <Card>
-                  <CardHeader><CardTitle className="text-base flex items-center gap-2"><GitCompare className="w-4 h-4" /> 账户对比分析</CardTitle></CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-3 mb-6">
-                      {[0, 1, 2].map(idx => (
-                        <div key={idx} className="w-64">
-                          <label className="text-xs text-muted-foreground mb-1 block">选择账户 {idx + 1}</label>
-                          <Select value={compareCodes[idx]} onValueChange={(v) => { const next = [...compareCodes]; next[idx] = v; setCompareCodes(next); }}>
-                            <SelectTrigger><SelectValue placeholder={`选择账户 ${idx + 1}`} /></SelectTrigger>
-                            <SelectContent>
-                              {result.accountList.map(a => <SelectItem key={a.账户代码} value={a.账户代码}>{a.账户名称} ({a.账户代码})</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      ))}
-                    </div>
-                    {compareAccounts.length > 0 && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {compareAccounts.map(acct => (
-                          <Card key={acct.账户代码} className="border-2">
-                            <CardHeader className="pb-2">
-                              <CardTitle className="text-sm flex items-center justify-between">
-                                <span className="truncate">{acct.账户名称}</span>
-                                <Badge variant="outline" className="font-mono text-xs shrink-0">{acct.账户代码}</Badge>
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                              <div className="grid grid-cols-2 gap-2 text-xs">
-                                <div className="bg-muted/50 rounded p-2 text-center">
-                                  <div className="text-lg font-bold text-primary">{acct.总笔数}</div>
-                                  <div className="text-muted-foreground">总笔数</div>
-                                </div>
-                                <div className="bg-muted/50 rounded p-2 text-center">
-                                  <div className="text-lg font-bold text-primary">{Object.values(acct.买卖方向).reduce((a, b) => a + b, 0).toFixed(2)}</div>
-                                  <div className="text-muted-foreground">总金额(亿元)</div>
-                                </div>
-                              </div>
-                              {acct.债券类别.length > 0 && (
-                                <div>
-                                  <div className="text-xs font-semibold mb-1">债券类别</div>
-                                  {acct.债券类别.map(cat => (
-                                    <div key={cat.类别} className="text-xs grid grid-cols-3 gap-1 mb-1">
-                                      <span className="text-muted-foreground">{cat.类别}</span>
-                                      <span className="text-green-600 font-mono">买 {cat.买入金额.toFixed(2)}</span>
-                                      <span className="text-red-500 font-mono">卖 {cat.卖出金额.toFixed(2)}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              {acct.基金分析 && <div className="text-xs"><span className="font-semibold">基金:</span><span className="text-green-600 ml-1">买 {acct.基金分析.买入金额.toFixed(2)}</span><span className="text-red-500 ml-2">卖 {acct.基金分析.卖出金额.toFixed(2)}</span></div>}
-                              {acct.转债分析 && <div className="text-xs"><span className="font-semibold">转债:</span><span className="text-green-600 ml-1">买 {acct.转债分析.买入金额.toFixed(2)}</span><span className="text-red-500 ml-2">卖 {acct.转债分析.卖出金额.toFixed(2)}</span></div>}
-                              {acct.期货分析 && <div className="text-xs"><span className="font-semibold">期货:</span><span className="ml-1">{acct.期货分析.笔数} 笔 / {acct.期货分析.总金额.toFixed(2)} 亿元</span></div>}
-                            </CardContent>
-                          </Card>
+                    <Table>
+                      <TableHeader><TableRow><TableHead>排名</TableHead><TableHead>账户名称</TableHead><TableHead>换手率</TableHead><TableHead>规模(亿)</TableHead></TableRow></TableHeader>
+                      <TableBody>
+                        {result.turnoverBottom10.map(item => (
+                          <TableRow key={item.账户代码}>
+                            <TableCell>{item.排名}</TableCell>
+                            <TableCell>{item.账户名称}</TableCell>
+                            <TableCell className="text-right font-mono text-green-600">{item.换手率}x</TableCell>
+                            <TableCell className="text-right font-mono">{item.账户规模}</TableCell>
+                          </TableRow>
                         ))}
-                      </div>
-                    )}
+                      </TableBody>
+                    </Table>
                   </CardContent>
                 </Card>
-              </TabsContent>
+              </div>
 
-              {/* ===== 异常检测 ===== */}
-              <TabsContent value="anomaly" className="space-y-4">
+              {/* 规模与品种关联 */}
+              <Card>
+                <CardHeader><CardTitle className="text-sm">规模档位与交易品种关联</CardTitle></CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <ComposedChart data={result.sizeBizRelation}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="规模档位" tick={{ fontSize: 11 }} />
+                      <YAxis yAxisId="left" />
+                      <YAxis yAxisId="right" orientation="right" />
+                      <Tooltip />
+                      <Legend />
+                      <Bar yAxisId="left" dataKey="平均回购金额" fill="#3b82f6" />
+                      <Bar yAxisId="left" dataKey="平均债券买入" fill="#10b981" />
+                      <Bar yAxisId="left" dataKey="平均基金金额" fill="#f59e0b" />
+                      <Line yAxisId="right" type="monotone" dataKey="账户数" stroke="#ef4444" strokeWidth={2} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              {/* 净值与交易行为 */}
+              <Card>
+                <CardHeader><CardTitle className="text-sm">净值与交易行为关联（按净值降序）</CardTitle></CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[400px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>账户代码</TableHead><TableHead>账户名称</TableHead>
+                          <TableHead>最新净值</TableHead><TableHead>最新规模(亿)</TableHead>
+                          <TableHead>交易金额(亿)</TableHead><TableHead>笔数</TableHead>
+                          <TableHead>买入(亿)</TableHead><TableHead>卖出(亿)</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {result.navTradeRelation.slice(0, 50).map(item => (
+                          <TableRow key={item.账户代码}>
+                            <TableCell className="font-mono text-xs">{item.账户代码}</TableCell>
+                            <TableCell>{item.账户名称}</TableCell>
+                            <TableCell className={`font-mono ${item.最新净值 && item.最新净值 > 1 ? 'text-green-600' : item.最新净值 && item.最新净值 < 1 ? 'text-red-600' : ''}`}>
+                              {item.最新净值 ?? '-'}
+                            </TableCell>
+                            <TableCell className="font-mono">{item.最新规模}</TableCell>
+                            <TableCell className="font-mono">{item.交易总金额}</TableCell>
+                            <TableCell>{item.交易笔数}</TableCell>
+                            <TableCell className="font-mono text-blue-600">{item.买入金额}</TableCell>
+                            <TableCell className="font-mono text-red-600">{item.卖出金额}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+
+              {/* 规模时间序列 */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="text-sm">账户规模时间序列（规模Top20）</CardTitle>
+                  <Select value={selectedPositionAccount} onValueChange={setSelectedPositionAccount}>
+                    <SelectTrigger className="w-64 text-xs h-8">
+                      <SelectValue placeholder="选择账户查看详情" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">全部（Top5）</SelectItem>
+                      {result.positionTimeSeries.map(ts => (
+                        <SelectItem key={ts.账户代码} value={ts.账户代码}>{ts.账户名称} ({ts.账户代码})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </CardHeader>
+                <CardContent>
+                  <PositionTimeSeriesChart data={result.positionTimeSeries} selectedAccount={selectedPositionAccount || undefined} />
+                </CardContent>
+              </Card>
+
+              {/* 净值时间序列 */}
+              <Card>
+                <CardHeader><CardTitle className="text-sm">单位净值时间序列</CardTitle></CardHeader>
+                <CardContent>
+                  <PositionNavTimeSeriesChart data={result.positionTimeSeries} selectedAccount={selectedPositionAccount || undefined} />
+                </CardContent>
+              </Card>
+
+              {/* 规模变动 */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2"><Zap className="w-4 h-4 text-amber-500" /> 异常交易检测</CardTitle>
+                  <CardHeader><CardTitle className="text-sm">规模增长 Top10</CardTitle></CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader><TableRow><TableHead>账户</TableHead><TableHead>期初(亿)</TableHead><TableHead>期末(亿)</TableHead><TableHead>变动</TableHead></TableRow></TableHeader>
+                      <TableBody>
+                        {result.sizeChangeTop10.map(item => (
+                          <TableRow key={item.账户代码}>
+                            <TableCell>{item.账户名称}</TableCell>
+                            <TableCell className="font-mono">{item.期初规模}</TableCell>
+                            <TableCell className="font-mono">{item.期末规模}</TableCell>
+                            <TableCell className={`font-mono ${item.变动比例 > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {item.变动比例 > 0 ? '+' : ''}{item.变动比例}% ({item.变动金额}亿)
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader><CardTitle className="text-sm">规模缩水 Top10</CardTitle></CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader><TableRow><TableHead>账户</TableHead><TableHead>期初(亿)</TableHead><TableHead>期末(亿)</TableHead><TableHead>变动</TableHead></TableRow></TableHeader>
+                      <TableBody>
+                        {result.sizeShrinkTop10.map(item => (
+                          <TableRow key={item.账户代码}>
+                            <TableCell>{item.账户名称}</TableCell>
+                            <TableCell className="font-mono">{item.期初规模}</TableCell>
+                            <TableCell className="font-mono">{item.期末规模}</TableCell>
+                            <TableCell className="font-mono text-red-600">
+                              {item.变动比例}% ({item.变动金额}亿)
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* 持仓异常 */}
+              {result.positionAnomalies.length > 0 && (
+                <Card className="border-red-200">
+                  <CardHeader className="flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-red-500" />
+                    <CardTitle className="text-sm">持仓异常账户 ({result.positionAnomalies.length} 个)</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {result.anomalies.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">未检测到异常交易</div>
-                    ) : (
-                      <>
-                        <div className="text-sm text-muted-foreground mb-4">
-                          共检测到 {result.anomalies.filter(a => a.类型 === '超大额').length} 笔超大额交易、{result.anomalies.filter(a => a.类型 === '高频率').length} 个高频账户
-                        </div>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>类型</TableHead>
-                              <TableHead>账户</TableHead>
-                              <TableHead>业务品种</TableHead>
-                              <TableHead>交易方向</TableHead>
-                              <TableHead>名称</TableHead>
-                              <TableHead className="text-right">金额(亿元)</TableHead>
-                              <TableHead>日期/月份</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {result.anomalies.map((a, i) => (
-                              <TableRow key={i} className={a.类型 === '超大额' ? 'bg-red-50/50' : 'bg-amber-50/50'}>
-                                <TableCell><Badge variant={a.类型 === '超大额' ? 'destructive' : 'secondary'} className="text-xs">{a.类型}</Badge></TableCell>
-                                <TableCell className="text-xs"><div className="font-medium">{a.账户名称}</div><div className="text-muted-foreground font-mono">{a.账户代码}</div></TableCell>
-                                <TableCell className="text-xs">{a.业务品种}</TableCell>
-                                <TableCell className="text-xs">{a.交易方向}</TableCell>
-                                <TableCell className="text-xs max-w-[120px] truncate">{a.名称}</TableCell>
-                                <TableCell className={`text-right font-mono text-xs ${a.金额 >= 50 ? 'text-red-600 font-bold' : ''}`}>{a.金额 > 0 ? a.金额.toFixed(4) : '-'}</TableCell>
-                                <TableCell className="text-xs">{a.日期 || '-'}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </>
-                    )}
+                    <Table>
+                      <TableHeader><TableRow><TableHead>类型</TableHead><TableHead>账户</TableHead><TableHead>规模(亿)</TableHead><TableHead>换手率</TableHead><TableHead>描述</TableHead></TableRow></TableHeader>
+                      <TableBody>
+                        {result.positionAnomalies.map((item, i) => (
+                          <TableRow key={i} className={item.类型 === '净值为负' ? 'bg-red-50' : item.类型 === '规模大交易少' ? 'bg-amber-50' : ''}>
+                            <TableCell><Badge variant={item.类型 === '净值为负' ? 'destructive' : 'outline'}>{item.类型}</Badge></TableCell>
+                            <TableCell>{item.账户名称}</TableCell>
+                            <TableCell className="font-mono">{item.账户规模}</TableCell>
+                            <TableCell className="font-mono">{item.换手率}x</TableCell>
+                            <TableCell className="text-xs">{item.描述}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </CardContent>
                 </Card>
-              </TabsContent>
-            </Tabs>
-          </>
-        )}
-      </main>
+              )}
 
-      <footer className="border-t mt-12 py-4 text-center text-xs text-muted-foreground">
-        交易数据分析平台 · 金额单位：亿元 · 数据仅在本地分析不上传服务器
-      </footer>
+              {/* 合并账户列表 */}
+              <Card>
+                <CardHeader><CardTitle className="text-sm">完整账户列表（含规模数据）</CardTitle></CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[500px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>账户代码</TableHead><TableHead>账户名称</TableHead>
+                          <TableHead>规模档位</TableHead><TableHead>最新规模(亿)</TableHead>
+                          <TableHead>净值</TableHead><TableHead>换手率</TableHead>
+                          <TableHead>交易金额(亿)</TableHead><TableHead>笔数</TableHead>
+                          <TableHead>主要品种</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {result.mergedAccountList.map(item => (
+                          <TableRow key={item.账户代码}>
+                            <TableCell className="font-mono text-xs">{item.账户代码}</TableCell>
+                            <TableCell>{item.账户名称}</TableCell>
+                            <TableCell>{item.规模档位 ? <Badge variant="outline">{item.规模档位}</Badge> : '-'}</TableCell>
+                            <TableCell className="font-mono">{item.最新规模 ?? '-'}</TableCell>
+                            <TableCell className={`font-mono ${item.最新净值 && item.最新净值 > 1 ? 'text-green-600' : item.最新净值 && item.最新净值 < 1 ? 'text-red-600' : ''}`}>
+                              {item.最新净值 ?? '-'}
+                            </TableCell>
+                            <TableCell className="font-mono">{item.换手率 !== undefined ? `${item.换手率}x` : '-'}</TableCell>
+                            <TableCell className="font-mono">{item.总交易金额}</TableCell>
+                            <TableCell>{item.总交易笔数}</TableCell>
+                            <TableCell><Badge variant="secondary">{item.主要品种}</Badge></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {/* 可视化 */}
+          <TabsContent value="viz" className="space-y-4">
+            <Card>
+              <CardHeader><CardTitle className="text-sm">月度交易趋势</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={result.monthlyTrend}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="月份" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Area type="monotone" dataKey="回购业务" stackId="1" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} />
+                    <Area type="monotone" dataKey="债券业务" stackId="1" stroke="#10b981" fill="#10b981" fillOpacity={0.6} />
+                    <Area type="monotone" dataKey="基金" stackId="1" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.6} />
+                    <Area type="monotone" dataKey="可转债" stackId="1" stroke="#ef4444" fill="#ef4444" fillOpacity={0.6} />
+                    <Area type="monotone" dataKey="国债期货" stackId="1" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.6} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle className="text-sm">账户交易热力图（Top30 账户 × 月份）</CardTitle></CardHeader>
+              <CardContent>
+                <ScrollArea className="w-full overflow-auto">
+                  <div className="min-w-[800px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="sticky left-0 bg-white">账户</TableHead>
+                          {result.heatmapMonths.map(m => <TableHead key={m} className="text-xs">{m}</TableHead>)}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {result.heatmapData.map(row => (
+                          <TableRow key={row.账户代码}>
+                            <TableCell className="sticky left-0 bg-white text-xs font-mono">{row.账户名称}</TableCell>
+                            {result.heatmapMonths.map(m => {
+                              const v = row[m] as number;
+                              const intensity = Math.min(v / 10, 1);
+                              return (
+                                <TableCell key={m} className="text-xs font-mono p-1" style={{ backgroundColor: `rgba(59, 130, 246, ${intensity * 0.3})` }}>
+                                  {v > 0 ? v.toFixed(2) : '-'}
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle className="text-sm">账户画像雷达图（Top15）</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={400}>
+                  <RadarChart data={result.radarAccounts}>
+                    <PolarGrid />
+                    <PolarAngleAxis dataKey="账户名称" tick={{ fontSize: 10 }} />
+                    <PolarRadiusAxis angle={30} domain={[0, 100]} />
+                    {result.radarAccounts.slice(0, 5).map((acct, i) => (
+                      <Radar key={acct.账户代码} name={acct.账户名称} dataKey={(data: any) => data.账户代码 === acct.账户代码 ? data.回购活跃度 : 0}
+                        stroke={['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][i]} fill={['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][i]} fillOpacity={0.1} />
+                    ))}
+                    <Legend />
+                    <Tooltip />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle className="text-sm">债券期限结构</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <ComposedChart data={result.termStructure}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="期限段" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="买入金额" fill="#3b82f6" />
+                    <Bar dataKey="卖出金额" fill="#ef4444" />
+                    <Line type="monotone" dataKey="净买卖" stroke="#10b981" strokeWidth={2} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {result.anomalies.length > 0 && (
+              <Card className="border-red-200">
+                <CardHeader className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-red-500" />
+                  <CardTitle className="text-sm">交易异常记录 ({result.anomalies.length} 条)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[300px]">
+                    <Table>
+                      <TableHeader><TableRow><TableHead>类型</TableHead><TableHead>账户</TableHead><TableHead>品种</TableHead><TableHead>金额(亿)</TableHead><TableHead>日期</TableHead></TableRow></TableHeader>
+                      <TableBody>
+                        {result.anomalies.map((a, i) => (
+                          <TableRow key={i} className={a.类型 === '超大额' ? 'bg-red-50' : 'bg-amber-50'}>
+                            <TableCell><Badge variant={a.类型 === '超大额' ? 'destructive' : 'outline'}>{a.类型}</Badge></TableCell>
+                            <TableCell>{a.账户名称}</TableCell>
+                            <TableCell>{a.业务品种}</TableCell>
+                            <TableCell className="font-mono">{a.金额}</TableCell>
+                            <TableCell>{a.日期}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 }
