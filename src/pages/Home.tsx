@@ -455,9 +455,7 @@ export default function Home() {
             <TabsTrigger value="fund"><Package className="w-3 h-3 mr-1" />基金/转债/期货</TabsTrigger>
             <TabsTrigger value="low"><AlertTriangle className="w-3 h-3 mr-1" />低活跃度</TabsTrigger>
             <TabsTrigger value="special"><FileText className="w-3 h-3 mr-1" />特殊品种</TabsTrigger>
-            {result.totalPositionRecords > 0 && (
-              <TabsTrigger value="position"><Wallet className="w-3 h-3 mr-1" />持仓规模</TabsTrigger>
-            )}
+            <TabsTrigger value="position"><Wallet className="w-3 h-3 mr-1" />持仓规模</TabsTrigger>
             <TabsTrigger value="viz"><Thermometer className="w-3 h-3 mr-1" />可视化</TabsTrigger>
           </TabsList>
 
@@ -623,7 +621,6 @@ export default function Home() {
           </TabsContent>
 
           {/* 持仓规模（新增） */}
-          {result.totalPositionRecords > 0 && (
             <TabsContent value="position" className="space-y-4">
               {/* 概览卡片 */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -897,7 +894,6 @@ export default function Home() {
                 </CardContent>
               </Card>
             </TabsContent>
-          )}
 
           {/* 可视化 */}
           <TabsContent value="viz" className="space-y-4">

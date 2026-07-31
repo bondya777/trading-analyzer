@@ -976,11 +976,14 @@ function detectAnomalies(dfAll: Record<string, unknown>[]): AnomalyRecord[] {
 // 持仓规模分析（新增）
 // ============================================================
 
-function buildPositionOverview(dfPosition: Record<string, unknown>[]): PositionOverview {
+function buildPositionOverview(
+  dfPosition: Record<string, unknown>[],
+  tradeAccountCodes: Set<string>
+): PositionOverview {
   const uniqueAccounts = new Map<string, { 规模: number; 净值: number | undefined }>();
   for (const r of dfPosition) {
     const code = toStr(r['_账户代码']);
-    if (!code) continue;
+    if (!code || !tradeAccountCodes.has(code)) continue;
     uniqueAccounts.set(code, {
       规模: toNumber(r['_账户规模']),
       净值: toNumber(r['_累计单位净值']) || undefined,
@@ -1479,7 +1482,7 @@ export function runAnalysis(
   const allHgCodes = new Set(dfHg.map(r => toStr(r['_账户代码'])).filter(Boolean));
   const allZqCodes = new Set(dfZq.map(r => toStr(r['_账户代码'])).filter(Boolean));
   const allPositionCodes = new Set(dfPosition.map(r => toStr(r['_账户代码'])).filter(Boolean));
-  const allAccounts = new Set([...allHgCodes, ...allZqCodes, ...allPositionCodes]);
+  const allAccounts = new Set([...allHgCodes, ...allZqCodes]);
 
   // 1.1 回购业务（过滤单笔超100亿）
   const dfHgFiltered = dfHg.filter(r => toNumber(r['_金额元']) <= 100 * 1e8);
@@ -1662,7 +1665,7 @@ export function runAnalysis(
   }
 
   // ===== 新增：持仓规模分析 =====
-  const positionOverview = buildPositionOverview(dfPosition);
+  const positionOverview = buildPositionOverview(dfPosition, allAccounts);
   const sizeLayerStats = buildSizeLayerStats(dfAll, dfPosition);
   const { top10: turnoverTop10, bottom10: turnoverBottom10 } = buildTurnoverStats(activityMap, dfPosition);
   const sizeBizRelation = buildSizeBizRelation(dfAll, dfPosition);
