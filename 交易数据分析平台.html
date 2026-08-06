@@ -94,8 +94,8 @@ th .th-sort:hover{color:#1d4ed8}
   </div>
   <div class="upload-slot" data-slot="pos">
     <div class="upload-icon">📈</div>
-    <div class="slot-label">② 持仓规模（必选）</div>
-    <div class="slot-status">原始31列或旧7列；流水为三表合一时自动填充</div>
+    <div class="slot-label">② 持仓规模（必选，可多选/按月分文件）</div>
+    <div class="slot-status">原始31列或旧7列；多文件自动合并；流水为三表合一时自动填充</div>
   </div>
   <div class="upload-slot" data-slot="hdStart">
     <div class="upload-icon">📅</div>
@@ -139,6 +139,7 @@ const TRADE_VARIETIES=new Set(['现券买卖','基金买卖','国债期货']); /
 const CONV_BONDS=new Set(['可转债','可交换债']); // 估值偏移监控排除转债类
 function isConvBond(r){if(r._class)return r._class==='转债';return toStr(r._bondType).includes('转债')||toStr(r._cat).includes('转债')||toStr(r._name2).includes('转债')}
 const DQ_RULES=[
+  {id:'R0',level:'过滤',text:'交易状态非「成交确认」（已撤销/审批通过等非最终成交记录，不进入任何统计）'},
   {id:'R1',level:'过滤',text:'回购：单笔金额 > 账户最近规模 × 1.5'},
   {id:'R2',level:'过滤',text:'现券买卖/基金买卖/国债期货：单笔金额 > 账户最近规模'},
   {id:'R3',level:'过滤',text:'债券：到期收益率 |值| > 10%（疑似单位录错）'},
@@ -172,14 +173,16 @@ function nearestScale(scaleMap,code,date){
 }
 function applyDataQuality(dfHg,dfZq,dfPos){
   const mk=id=>{const rule=DQ_RULES.find(x=>x.id===id);return{rule:id,level:rule.level,text:rule.text,rows:[]}};
-  const bR1=mk('R1'),bR1w=mk('R1w'),bR2=mk('R2'),bR3=mk('R3'),bR5=mk('R5'),bR9=mk('R9'),bR6=mk('R6'),bR7=mk('R7');
+  const bR0=mk('R0'),bR1=mk('R1'),bR1w=mk('R1w'),bR2=mk('R2'),bR3=mk('R3'),bR5=mk('R5'),bR9=mk('R9'),bR6=mk('R6'),bR7=mk('R7');
   const addRow=(b,r,detail)=>{if(b.rows.length<5000)b.rows.push({date:r._date?fmtDate(r._date):(r._dateStr||''),code:toStr(r._code),name:toStr(r._name)||toStr(r._nameSAC)||toStr(r._code),variety:toStr(r._biz)||toStr(r._variety)||'持仓',detail,amount:r._amount!=null?Math.round(r._amount/1e8*10000)/10000:null})};
   const scaleMap=buildScaleLookup(dfPos);
   // --- 回购表 ---
   const hgClean=[];
   for(const r of dfHg){
     let filtered=false;
-    if(r._amount===0){addRow(bR5,r,'金额=0');filtered=true}
+    const stHg=toStr(r['交易状态']);
+    if(stHg&&stHg!=='成交确认'){addRow(bR0,r,'交易状态='+stHg);filtered=true}
+    if(!filtered&&r._amount===0){addRow(bR5,r,'金额=0');filtered=true}
     if(!filtered){
       const sc=nearestScale(scaleMap,toStr(r._code),r._date);
       if(sc&&sc>0){
@@ -195,7 +198,9 @@ function applyDataQuality(dfHg,dfZq,dfPos){
   const zqClean=[];
   for(const r of dfZq){
     let filtered=false;
-    if(r._amount===0){addRow(bR5,r,'金额=0');filtered=true}
+    const stZq=toStr(r['交易状态']);
+    if(stZq&&stZq!=='成交确认'){addRow(bR0,r,'交易状态='+stZq);filtered=true}
+    if(!filtered&&r._amount===0){addRow(bR5,r,'金额=0');filtered=true}
     const yld=toNum(r['到期收益率(%)']);
     if(!filtered&&Math.abs(yld)>10){addRow(bR3,r,`到期收益率 ${yld.toFixed(2)}%`);filtered=true}
     if(!filtered&&TRADE_VARIETIES.has(toStr(r._variety))){
@@ -239,12 +244,12 @@ function applyDataQuality(dfHg,dfZq,dfPos){
     if(spikeRows.has(r)){addRow(bR7,r,`杠杆率 ${(r._lev*100).toFixed(0)}%（单日尖刺）`);continue}
     posClean.push(r);
   }
-  const dqReport=[bR1,bR2,bR3,bR5,bR6,bR7,bR1w,bR9].filter(b=>b.rows.length>0);
+  const dqReport=[bR0,bR1,bR2,bR3,bR5,bR6,bR7,bR1w,bR9].filter(b=>b.rows.length>0);
   return{hgClean,zqClean,posClean,dqReport,levRedAccounts,scaleMap};
 }
 
 // ===== 多文件解析套件 =====
-const FLOW_KEEP=['交易编号','交易状态','交易品种','业务品种','交易日期','交易方向','簿记场所','托管市场','代码','名称','交易面额(万)','交易金额(元)','到期结算金额(元)','期限','交易员','交易对手','到期收益率(%)','行权收益率(%)','净价(元)','全价(元)','收益率(%)','交易分类','交易市场','内部证券账户名称','内部证券账户代码','中债估值偏移度(%)','清算所估值偏移度(%)','中证估值偏移度(%)','债券类别','债券品种'];
+const FLOW_KEEP=['交易编号','交易状态','交易品种','业务品种','交易日期','交易方向','簿记场所','托管市场','代码','名称','交易面额(万)','交易金额(元)','期限','交易员','到期收益率(%)','全价(元)','内部证券账户名称','内部证券账户代码','中债估值偏移度(%)','清算所估值偏移度(%)','中证估值偏移度(%)'];
 function readWb(file){return new Promise((res,rej)=>{const reader=new FileReader();reader.onload=e=>res(XLSX.read(new Uint8Array(e.target.result),{type:'array'}));reader.onerror=()=>rej(new Error('文件读取失败: '+file.name));reader.readAsArrayBuffer(file)})}
 
 // 交易流水：自动识别原始格式（双行表头/110列）与旧精简格式；拆分为回购/债券；剔除销售户；宽表裁剪列
@@ -301,11 +306,11 @@ function parseHoldingsWb(wb,label){
     const m=name.match(/(\d{1,2}\.\d{1,2})/);
     if(m&&!out.dateStr)out.dateStr=m[1];
     if(name.includes('期货')){
-      for(const r of rows){const acct=toStr(r['证券账户代码']);if(!acct)continue;out.futures.push({acct,contract:toStr(r['合约代码']),dir:toStr(r['多空头标志']),qty:toNum(r['交易数量(手)']),margin:toNum(r['保证金占用(万元)']),floatPnl:toNum(r['浮动盈亏_非逐日(万元)']),realPnl:toNum(r['已实现盈亏_非逐日(万元)'])})}
+      for(const r of rows){const acct=toStr(r['证券账户代码']);if(!acct)continue;out.futures.push({acct,contract:toStr(r['合约代码']),dir:toStr(r['多空头标志']),qty:toNum(r['交易数量(手)']),costNonDaily:toNum(r['持仓成本_非逐日(万元)']),margin:toNum(r['保证金占用(万元)']),floatPnl:toNum(r['浮动盈亏_非逐日(万元)']),realPnl:toNum(r['已实现盈亏_非逐日(万元)'])})}
     }else if(name.includes('非标')||name.includes('基金')){
-      for(const r of rows){const acct=toStr(r['证券账户代码']),code=toStr(r['基金代码']);if(!acct&&!code)continue;out.funds.push({acct,code,name:toStr(r['基金名称']),kind:toStr(r['基金种类']),assetType:toStr(r['资产类型']),qty:toNum(r['持仓数量']),mv:toNum(r['市值(万元)']),cost:toNum(r['总成本(万元)']),floatPnl:toNum(r['浮动盈亏(万元)']),realPnl:toNum(r['已实现盈亏(万元)'])})}
+      for(const r of rows){const acct=toStr(r['证券账户代码']),code=toStr(r['基金代码']);if(!acct&&!code)continue;out.funds.push({acct,code,name:toStr(r['基金名称']),kind:toStr(r['基金种类']),assetType:toStr(r['资产类型']),face:toNum(r['持仓面额(万元)']),mv:toNum(r['市值(万元)']),floatPnl:toNum(r['浮动盈亏(万元)']),realPnl:toNum(r['已实现盈亏(万元)'])})}
     }else{
-      for(const r of rows){const acct=toStr(r['证券账户代码']),code=toStr(r['债券代码']);if(!acct&&!code)continue;out.bonds.push({acct,code,name:toStr(r['债券名称']),bondType:toStr(r['债券类型']),assetType:toStr(r['资产类型']),rateClass:toStr(r['利率分类']),face:toNum(r['持仓面额(万元)']),mv:toNum(r['市值(万元)']),costFull:toNum(r['每百元全价成本(元)']),costNet:toNum(r['每百元净价成本(元)']),floatPnl:toNum(r['浮动盈亏(万元)']),realPnl:toNum(r['已实现盈亏(万元)']),dur:toNum(r['修正久期']),remain:toNum(r['剩余期限(年)'])})}
+      for(const r of rows){const acct=toStr(r['证券账户代码']),code=toStr(r['债券代码']);if(!acct&&!code)continue;out.bonds.push({acct,code,name:toStr(r['债券名称']),bondType:toStr(r['债券类型']),assetType:toStr(r['资产类型']),rateClass:toStr(r['利率分类']),face:toNum(r['持仓面额(万元)']),mv:toNum(r['市值(万元)']),costFull:toNum(r['每百元全价成本(元)']),dorm:toNum(r['休眠天数']),floatPnl:toNum(r['浮动盈亏(万元)']),realPnl:toNum(r['已实现盈亏(万元)'])})}
     }
   }
   return out;
@@ -1155,13 +1160,13 @@ function buildAccountIdentity(dfZqTrade,hdStart,hdEnd,fifo,dfPosClean){
   const typeAt=hd=>{
     const m=new Map();
     for(const b of hd.bonds){
-      if(!(b.mv>0))continue;
+      if(!b.mv)continue; // 市值=0 才跳过；负市值（看空/做空）也参与固收+判定
       const e=m.get(b.acct)||{conv:false,fund:false,reit:false};
       if(CONV.has(b.bondType))e.conv=true;
       m.set(b.acct,e);
     }
     for(const f of hd.funds){
-      if(!(f.mv>0))continue;
+      if(!f.mv)continue; // 同上：负市值计入判定
       const e=m.get(f.acct)||{conv:false,fund:false,reit:false};
       if(f.kind==='REITs')e.reit=true;
       else if(f.kind.includes('ETF')||f.kind.includes('基金'))e.fund=true;
