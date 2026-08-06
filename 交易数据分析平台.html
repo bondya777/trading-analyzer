@@ -120,6 +120,7 @@ th .th-sort:hover{color:#1d4ed8}
 </div>
 <script>
 function toNum(v){if(typeof v==='number')return v;if(typeof v==='string'){const n=parseFloat(v.replace(/,/g,''));return isNaN(n)?0:n}return 0}
+function minMaxTime(dates){let mn=Infinity,mx=-Infinity;for(const d of dates){if(!d)continue;const t=d.getTime();if(t<mn)mn=t;if(t>mx)mx=t}return mn===Infinity?[null,null]:[mn,mx]}
 function toStr(v){if(v==null)return'';return String(v).trim()}
 function parseDate(v){if(v instanceof Date&&!isNaN(v.getTime()))return v;if(typeof v==='number'){const epoch=new Date(Date.UTC(1899,11,30));return new Date(epoch.getTime()+v*86400000)}if(typeof v==='string'){const d=new Date(v);if(!isNaN(d.getTime()))return d;if(/^\d{8}$/.test(v))return new Date(parseInt(v.slice(0,4)),parseInt(v.slice(4,6))-1,parseInt(v.slice(6,8)))}return null}
 function getMonthKey(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
@@ -528,8 +529,9 @@ function buildPositionOverview(dfPos,activeCodes){
   const bucketOrder=['<1亿','1-3亿','3-7亿','7-15亿','15-30亿','>30亿'];
   const sizeDist=bucketOrder.map(b=>{const v=sizeDistMap.get(b);return{bucket:b,count:v?v.count:0,totalSize:v?Math.round(v.totalSize/1e8*10000)/10000:0};});
   const dates=posFiltered.map(r=>r._date).filter(d=>d);
-  const minDate=dates.length>0?new Date(Math.min(...dates.map(d=>d.getTime()))):null;
-  const maxDate=dates.length>0?new Date(Math.max(...dates.map(d=>d.getTime()))):null;
+  const[minT2,maxT2]=minMaxTime(dates);
+  const minDate=minT2!=null?new Date(minT2):null;
+  const maxDate=maxT2!=null?new Date(maxT2):null;
   return{hasData:true,summary:{accountCount:latest.length,avgSize:sizes.length>0?Math.round(avg(sizes)/1e8*10000)/10000:0,medSize:sizes.length>0?Math.round((sizes.sort((a,b)=>a-b)[Math.floor(sizes.length/2)]||0)/1e8*10000)/10000:0,maxSize:sizes.length>0?Math.round(Math.max(...sizes,0)/1e8*10000)/10000:0,minSize:sizes.length>0?Math.round(Math.min(...sizes.filter(s=>s>0),Infinity)/1e8*10000)/10000:0,avgNav:navs.length>0?Math.round(avg(navs)*10000)/10000:null,avgTotal:totals.length>0?Math.round(avg(totals)/1e8*10000)/10000:0},sizeDist,dateRange:minDate&&maxDate?`${fmtDate(minDate)} ~ ${fmtDate(maxDate)}`:'',accountCount:latest.length,latest};
 }
 
@@ -804,7 +806,7 @@ function buildValuationDeviation(dfZqClean){
 function buildLifecycle(dfPosClean,dfAllTrade){
   const dates=dfPosClean.map(r=>r._date).filter(d=>d);
   if(dates.length===0)return null;
-  const minT=Math.min(...dates.map(d=>d.getTime())),maxT=Math.max(...dates.map(d=>d.getTime()));
+  const[minT,maxT]=minMaxTime(dates);
   const workdays=[];const wdIndex=new Map();
   const d=new Date(minT);
   while(d.getTime()<=maxT){if(isChinaWorkday(d)){const s=fmtDate(d);wdIndex.set(s,workdays.length);workdays.push(s)}d.setDate(d.getDate()+1)}
