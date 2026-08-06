@@ -89,8 +89,8 @@ th .th-sort:hover{color:#1d4ed8}
 <div class="upload-slots" id="uploadSlots">
   <div class="upload-slot" data-slot="flow">
     <div class="upload-icon">📊</div>
-    <div class="slot-label">① 交易流水（必选）</div>
-    <div class="slot-status">原始格式或旧三表精简版</div>
+    <div class="slot-label">① 交易流水（必选，可多选/按月分文件）</div>
+    <div class="slot-status">原始格式或旧三表精简版；单文件超限时可按月拆分后一起拖入</div>
   </div>
   <div class="upload-slot" data-slot="pos">
     <div class="upload-icon">📈</div>
@@ -108,7 +108,7 @@ th .th-sort:hover{color:#1d4ed8}
     <div class="slot-status">用于品种精准映射与持仓分析</div>
   </div>
 </div>
-<input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
+<input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none" multiple>
 <button id="startBtn" disabled>请先上传全部 4 个文件</button>
 <div id="loadingArea" style="display:none"><div class="loading"><div class="loading-spinner"></div><p id="loadingText" style="color:#64748b">正在分析数据，请稍候...</p></div></div>
 <div id="errorArea" style="display:none"></div>
@@ -2201,35 +2201,37 @@ function initCharts(result){
   }
 }
 
-const pendingFiles={flow:null,pos:null,hdStart:null,hdEnd:null};
+const pendingFiles={flow:[],pos:[],hdStart:[],hdEnd:[]};
 let activeSlot=null;
 document.querySelectorAll('.upload-slot').forEach(slot=>{
   slot.addEventListener('click',()=>{activeSlot=slot.dataset.slot;document.getElementById('fileInput').click()});
   slot.addEventListener('dragover',e=>{e.preventDefault();slot.classList.add('dragover')});
   slot.addEventListener('dragleave',()=>slot.classList.remove('dragover'));
-  slot.addEventListener('drop',e=>{e.preventDefault();slot.classList.remove('dragover');if(e.dataTransfer.files.length>0)assignFile(slot.dataset.slot,e.dataTransfer.files[0])});
+  slot.addEventListener('drop',e=>{e.preventDefault();slot.classList.remove('dragover');if(e.dataTransfer.files.length>0)assignFiles(slot.dataset.slot,e.dataTransfer.files)});
 });
 document.getElementById('fileInput').addEventListener('change',e=>{
-  if(e.target.files.length>0&&activeSlot)assignFile(activeSlot,e.target.files[0]);
+  if(e.target.files.length>0&&activeSlot)assignFiles(activeSlot,e.target.files);
   e.target.value='';
 });
-function assignFile(slot,file){
-  pendingFiles[slot]=file;
+function assignFiles(slot,fileList){
+  pendingFiles[slot]=Array.from(fileList);
   const el=document.querySelector(`.upload-slot[data-slot="${slot}"]`);
   el.classList.add('filled');
-  el.querySelector('.slot-status').textContent=`${file.name}（${(file.size/1048576).toFixed(1)}MB）`;
+  const totalMB=pendingFiles[slot].reduce((s,f)=>s+f.size,0)/1048576;
+  const names=pendingFiles[slot].map(f=>f.name);
+  el.querySelector('.slot-status').textContent=pendingFiles[slot].length>1?`${pendingFiles[slot].length} 个文件（共 ${totalMB.toFixed(1)}MB）`:`${names[0]}（${totalMB.toFixed(1)}MB）`;
+  el.title=names.join('\n');
   checkReady();
 }
 function checkReady(){
   const btn=document.getElementById('startBtn');
   const missing=[];
-  if(!pendingFiles.flow)missing.push('交易流水');
-  if(!pendingFiles.hdStart)missing.push('期初持仓明细');
-  if(!pendingFiles.hdEnd)missing.push('期末持仓明细');
-  // 持仓规模：单独文件或流水为旧三表合一格式（解析时自动读取）
+  if(!pendingFiles.flow.length)missing.push('交易流水');
+  if(!pendingFiles.hdStart.length)missing.push('期初持仓明细');
+  if(!pendingFiles.hdEnd.length)missing.push('期末持仓明细');
   if(missing.length===0){
     btn.disabled=false;btn.classList.add('ready');
-    btn.textContent=pendingFiles.pos?'开始分析':'开始分析（未单独上传持仓规模，将尝试从流水文件读取）';
+    btn.textContent=pendingFiles.pos.length?'开始分析':'开始分析（未单独上传持仓规模，将尝试从流水文件读取）';
   }else{
     btn.disabled=true;btn.classList.remove('ready');
     btn.textContent='请先上传：'+missing.join('、');
@@ -2246,25 +2248,34 @@ document.getElementById('startBtn').addEventListener('click',async()=>{
   errorArea.style.display='none';
   resultArea.style.display='none';
   try{
-    setLoading('正在解析交易流水（大文件可能需要1分钟）…');
-    await tick();
-    const flow=parseFlowWb(await readWb(pendingFiles.flow));
-    if(!flow.hgRaw.length&&!flow.zqRaw.length)throw new Error('交易流水文件解析为空，请确认文件格式');
-    let posRaw=flow.posRaw;
-    if(pendingFiles.pos){
-      setLoading(`流水 ${(flow.hgRaw.length+flow.zqRaw.length).toLocaleString()} 行完成，正在解析持仓规模…`);
-      await tick();
-      posRaw=parsePosWb(await readWb(pendingFiles.pos));
+    const mergeHg=[],mergeZq=[],mergePos=[];
+    let salesDropped=0;
+    const n=Math.max(pendingFiles.flow.length,pendingFiles.pos.length);
+    for(let i=0;i<n;i++){
+      if(i<pendingFiles.flow.length){
+        setLoading(`正在解析交易流水 ${i+1}/${pendingFiles.flow.length}（${pendingFiles.flow[i].name}）…`);
+        await tick();
+        const f=parseFlowWb(await readWb(pendingFiles.flow[i]));
+        mergeHg.push(...f.hgRaw);mergeZq.push(...f.zqRaw);
+        if(f.posRaw.length)mergePos.push(...f.posRaw);
+        salesDropped+=f.salesDropped;
+      }
+      if(i<pendingFiles.pos.length){
+        setLoading(`正在解析持仓规模 ${i+1}/${pendingFiles.pos.length}…`);
+        await tick();
+        mergePos.push(...parsePosWb(await readWb(pendingFiles.pos[i])));
+      }
     }
+    if(!mergeHg.length&&!mergeZq.length)throw new Error('交易流水文件解析为空，请确认文件格式');
     setLoading('正在解析期初持仓明细…');
     await tick();
-    const hdStart=parseHoldingsWb(await readWb(pendingFiles.hdStart),pendingFiles.hdStart.name);
+    const hdStart=parseHoldingsWb(await readWb(pendingFiles.hdStart[0]),pendingFiles.hdStart[0].name);
     setLoading('正在解析期末持仓明细…');
     await tick();
-    const hdEnd=parseHoldingsWb(await readWb(pendingFiles.hdEnd),pendingFiles.hdEnd.name);
-    setLoading('解析完成，正在执行数据质量检查与分析…');
+    const hdEnd=parseHoldingsWb(await readWb(pendingFiles.hdEnd[0]),pendingFiles.hdEnd[0].name);
+    setLoading(`解析完成（回购 ${mergeHg.length.toLocaleString()} / 债券 ${mergeZq.length.toLocaleString()} / 持仓 ${mergePos.length.toLocaleString()} 行），正在执行数据质量检查与分析…`);
     await tick();
-    const result=runAnalysis(flow.hgRaw,flow.zqRaw,posRaw,hdStart,hdEnd,flow.salesDropped);
+    const result=runAnalysis(mergeHg,mergeZq,mergePos,hdStart,hdEnd,salesDropped);
     currentResult=result;
     setLoading('正在渲染图表…');
     await tick();
