@@ -310,7 +310,7 @@ function parseHoldingsWb(wb,label){
     }else if(name.includes('非标')||name.includes('基金')){
       for(const r of rows){const acct=toStr(r['证券账户代码']),code=toStr(r['基金代码']);if(!acct&&!code)continue;out.funds.push({acct,code,name:toStr(r['基金名称']),kind:toStr(r['基金种类']),assetType:toStr(r['资产类型']),face:toNum(r['持仓面额(万元)']),mv:toNum(r['市值(万元)']),floatPnl:toNum(r['浮动盈亏(万元)']),realPnl:toNum(r['已实现盈亏(万元)'])})}
     }else{
-      for(const r of rows){const acct=toStr(r['证券账户代码']),code=toStr(r['债券代码']);if(!acct&&!code)continue;out.bonds.push({acct,code,name:toStr(r['债券名称']),bondType:toStr(r['债券类型']),assetType:toStr(r['资产类型']),rateClass:toStr(r['利率分类']),face:toNum(r['持仓面额(万元)']),mv:toNum(r['市值(万元)']),costFull:toNum(r['每百元全价成本(元)']),dorm:toNum(r['休眠天数']),floatPnl:toNum(r['浮动盈亏(万元)']),realPnl:toNum(r['已实现盈亏(万元)'])})}
+      for(const r of rows){const acct=toStr(r['证券账户代码']),code=toStr(r['债券代码']);if(!acct&&!code)continue;out.bonds.push({acct,code,name:toStr(r['债券名称']),bondType:toStr(r['债券类型']),assetType:toStr(r['资产类型']),rateClass:toStr(r['利率分类']),face:toNum(r['持仓面额(万元)']),mv:toNum(r['市值(万元)']),costFull:toNum(r['每百元全价成本(元)']),remain:toNum(r['剩余期限(年)']),dorm:toNum(r['休眠天数']),floatPnl:toNum(r['浮动盈亏(万元)']),realPnl:toNum(r['已实现盈亏(万元)'])})}
     }
   }
   return out;
@@ -470,12 +470,10 @@ function buildTermStructure(dfZq){
   const buckets=['0-1年','1-3年','3-5年','5-10年','10-30年','30年+','基金'];
   const data=Object.fromEntries(buckets.map(b=>[b,{buy:0,sell:0}]));
   for(const r of dfZq){
-    let b=r._termBucket||'未知';
-    if(b==='未知'){
-      // 「未知」桶只保留基金数据，命名为「基金」；其余无期限标的不进图
-      if(toStr(r._biz).includes('基金')||toStr(r._variety).includes('基金'))b='基金';
-      else continue;
-    }
+    // 期限口径=期末持仓剩余期限；基金进「基金」桶；查不到或≤0（期内到期）的非基金记录归「0-1年」档
+    let b=r._termBucket;
+    if(toStr(r._biz).includes('基金')||toStr(r._variety).includes('基金')){if(!b)b='基金'}
+    else if(!b)b='0-1年';
     if(!data[b])continue;
     if(['买入','分销买入'].includes(toStr(r._dir)))data[b].buy+=r._amountYi;
     else if(['卖出','分销卖出'].includes(toStr(r._dir)))data[b].sell+=r._amountYi;
@@ -935,11 +933,12 @@ function buildTraderAnalysis(dfHg){
   return{rows,months:Array.from(monthSet).sort()};
 }
 
-function buildDeptSummary(dfPosClean,dfAllTrade){
+function buildDeptSummary(dfPosClean,dfAllTrade,activeCodes){
   const latestByCode=new Map();
   for(const r of dfPosClean){
     const code=toStr(r._code);
     if(!code||!r._date)continue;
+    if(activeCodes&&!activeCodes.has(code))continue; // 只统计交易流水去重账户 ∩ 持仓规模表
     const ex=latestByCode.get(code);
     if(!ex||r._date>ex._date)latestByCode.set(code,r);
   }
@@ -1135,6 +1134,7 @@ function buildFifo(dfZqTrade,hdStart){
     startFace.set(h.acct,(startFace.get(h.acct)||0)+h.face);
   }
   const trades=dfZqTrade.filter(r=>toStr(r._variety)==='现券买卖'&&r._date).slice().sort((a,b)=>a._date-b._date);
+  const periodStart=trades.length?trades[0]._date:null; // 期初批无买入日，持有天数按「卖出日−数据期初」下限估计
   const trips=[];
   for(const r of trades){
     const acct=toStr(r._code),code=toStr(r['代码']);
@@ -1154,7 +1154,8 @@ function buildFifo(dfZqTrade,hdStart){
       while(remain>1e-9&&book.queue.length>0){
         const lot=book.queue[0];
         const use=Math.min(lot.qty,remain);
-        trips.push({acct,code,name:book.name||toStr(r._name2),qty:use,buyPrice:lot.price,sellPrice:price,win:price>lot.price,holdDays:lot.date?Math.max(0,Math.round((r._date-lot.date)/86400000)):null});
+        const hd0=lot.date?Math.max(0,Math.round((r._date-lot.date)/86400000)):(periodStart?Math.max(0,Math.round((r._date-periodStart)/86400000)):null);
+        trips.push({acct,code,name:book.name||toStr(r._name2),qty:use,buyPrice:lot.price,sellPrice:price,win:price>lot.price,holdDays:hd0});
         lot.qty-=use;remain-=use;
         if(lot.qty<=1e-9)book.queue.shift();
       }
@@ -1176,17 +1177,16 @@ function buildFifo(dfZqTrade,hdStart){
   }
   const byAcct=new Map();
   for(const t of trips){
-    const ex=byAcct.get(t.acct)||{closed:0,wins:0,retNum:0,retDen:0,holdDays:[]};
+    const ex=byAcct.get(t.acct)||{closed:0,wins:0,retNum:0,retDen:0,holdNum:0,holdDen:0};
     ex.closed++;if(t.win)ex.wins++;
     ex.retNum+=(t.sellPrice-t.buyPrice)*t.qty;ex.retDen+=t.buyPrice*t.qty;
-    if(t.holdDays!=null)ex.holdDays.push(t.holdDays);
+    if(t.holdDays!=null){ex.holdNum+=t.holdDays*t.qty;ex.holdDen+=t.qty} // 面额加权
     byAcct.set(t.acct,ex);
   }
   const accounts=[];const map={};
   for(const[code,a]of byAcct){
     if(a.closed<3)continue;
-    a.holdDays.sort((x,y)=>x-y);
-    const rec={code,closed:a.closed,wins:a.wins,winRate:Math.round(a.wins/a.closed*1000)/10,avgRet:a.retDen>0?Math.round(a.retNum/a.retDen*10000)/100:0,avgHold:a.holdDays.length?a.holdDays[Math.floor(a.holdDays.length/2)]:null};
+    const rec={code,closed:a.closed,wins:a.wins,winRate:Math.round(a.wins/a.closed*1000)/10,avgRet:a.retDen>0?Math.round(a.retNum/a.retDen*10000)/100:0,avgHold:a.holdDen>0?Math.round(a.holdNum/a.holdDen):null};
     accounts.push(rec);map[code]=rec;
   }
   accounts.sort((a,b)=>b.closed-a.closed||b.winRate-a.winRate); // 排名以闭合笔数为主
@@ -1287,35 +1287,71 @@ function buildAccountIdentity(dfZqTrade,hdStart,hdEnd,fifo,dfPosClean,activeCode
     }
     idMap[code]={type,style,turnover:turnover!=null?Math.round(turnover*100)/100:null,avgHold,bothRatio:bothRatio!=null?Math.round(bothRatio*1000)/10:null,endMV:Math.round((endMV.get(code)||0)/1e4*100)/100,floatPnl:Math.round((floatPnl.get(code)||0)/1e4*100)/100,realPnl:Math.round((realPnl.get(code)||0)/1e4*100)/100};
   }
-  // 期初/期末截面计数与固收+构成：统一账户全集口径；持仓优先，无持仓看交易
+  // 截面账户集合：出现在持仓明细表中的账户（不论市值是否为零）
+  const hdSet=hd=>{const s=new Set();for(const b of hd.bonds){if(b.acct)s.add(b.acct)}for(const f of hd.funds){if(f.acct)s.add(f.acct)}return s};
+  const setS=hdSet(hdStart),setE=hdSet(hdEnd);
+  // 截面判定：在持仓表→持仓优先；在表但持仓全为0（空仓户）→交易流水兜底；不在表→不进该截面卡
+  const cardType=(flags,set,code)=>{
+    if(!set.has(code))return null;
+    const e=flags.get(code);
+    if(e)return flagType(e);
+    const sh=altShare.get(code);
+    return sh&&sh.alt>0?'固收+':'纯债';
+  };
   const typeCounts={start:{'固收+':0,'纯债':0},end:{'固收+':0,'纯债':0}};
   const endComp={conv:0,fund:0,reit:0};
+  let startN=0,endN=0;
+  const endTypeByCode={};
   for(const code of allCodes){
-    const tE=idMap[code].type;
-    typeCounts.end[tE]++;
-    // 期初：期初持仓优先，无期初持仓用交易兜底
-    let tS=typeStart.get(code);
-    if(!tS){const sh=altShare.get(code);tS=sh&&sh.alt>0?'固收+':'纯债'}
-    typeCounts.start[tS]++;
-    // 固收+构成（期末截面，账户可重叠）：持仓标记优先，无持仓用交易标记
-    if(tE==='固收+'){
-      const fl=flagsEnd.get(code)||altShare.get(code);
-      if(fl){if(fl.conv)endComp.conv++;if(fl.fund)endComp.fund++;if(fl.reit)endComp.reit++}
+    const tS=cardType(flagsStart,setS,code);
+    if(tS){typeCounts.start[tS]++;startN++}
+    const tE=cardType(flagsEnd,setE,code);
+    if(tE){
+      typeCounts.end[tE]++;endN++;endTypeByCode[code]=tE;
+      if(tE==='固收+'){
+        const fl=flagsEnd.get(code)||altShare.get(code);
+        if(fl){if(fl.conv)endComp.conv++;if(fl.fund)endComp.fund++;if(fl.reit)endComp.reit++}
+      }
     }
   }
-  return{idMap,typeCounts,endComp,universe:allCodes.size};
+  // 新开账户：期末在册 且 期初不在册（稳健定义；快闪户与老户关闭自动归位）
+  const newList=[];
+  for(const code of allCodes){
+    if(setE.has(code)&&!setS.has(code))newList.push({code,type:endTypeByCode[code]||'纯债'});
+  }
+  return{idMap,typeCounts,endComp,universe:allCodes.size,startN,endN,newList};
 }
 
-// ===== 配置/交易/混合：多维打分模型（权重与分段阈值可调）=====
-// 五个信号（越像交易型分越高）：真实换手率、平均持有天数（反向）、期初持仓留存率（反向）、交易天数占比、买卖双向率
-// 缺失信号自动跳过，其余信号权重归一；无任一信号的账户不出判定
+// ===== 配置/交易/混合：多维打分模型（权重与阈值可调）=====
+// 六信号（越像交易型分越高）：月均换手率、平均持有天数（反向）、期初持仓留存率（反向）、交易天数占比、买卖双向率、月均笔数（同规模档相对）
+// 缺失信号跳过、权重归一；交易型须同时满足 得分≥tradeMin 且 闭合往返≥minClosed 笔（只买不卖封顶混合型）
 const STYLE_CFG={
-  weights:{turnover:0.25,hold:0.20,retention:0.20,days:0.20,both:0.15}, // 权重合计=1
-  norm:{turnoverFull:2,holdFull:180,daysFull:0.5}, // 归一化基准：换手≥2、持有≥180天→0分、交易天数占比≥50% 记满分
-  tradeMin:60,configMax:30 // 得分≥60 交易型，≤30 配置型，其余混合型
+  weights:{turnover:0.20,hold:0.20,retention:0.15,days:0.15,both:0.10,count:0.20},
+  norm:{turnoverFull:1,holdFull:180,daysFull:0.5}, // 月均双边换手≥1 满分；持有≥180天计0分；交易天数占比≥50% 满分
+  tradeMin:60,configMax:30,minClosed:3,
+  countFactor:2 // 笔数得分 = min(本人月均笔数 ÷ (countFactor × 同规模档均值), 1)
 };
-function buildStyleScores(idMap,retention,dfAll){
-  // 交易天数占比：有交易的 distinct 工作日 ÷ 数据区间工作日总数
+function buildStyleScores(idMap,fifo,dfZqTrade,dfPosClean,dfAll){
+  const retention=fifo&&fifo.retention||{};
+  const N=STYLE_CFG.norm,W=STYLE_CFG.weights;
+  // ① 月度日均规模（换手率分母/规模分档）+ 全期日均规模
+  const sizeByAcctMonth=new Map();const sizeAvg=new Map();
+  for(const r of dfPosClean){
+    const c=toStr(r._code);if(!c||!r._date||!(r._size>0))continue;
+    const m=getMonthKey(r._date);
+    if(!sizeByAcctMonth.has(c))sizeByAcctMonth.set(c,new Map());
+    const mm=sizeByAcctMonth.get(c);const e=mm.get(m)||{sum:0,cnt:0};e.sum+=r._size;e.cnt++;mm.set(m,e);
+    const ea=sizeAvg.get(c)||{sum:0,cnt:0};ea.sum+=r._size;ea.cnt++;sizeAvg.set(c,ea);
+  }
+  // ② 月度买卖额与笔数（交易量口径）
+  const trByAcctMonth=new Map();
+  for(const r of dfZqTrade){
+    const c=toStr(r._code);if(!c||!r._month)continue;
+    if(!trByAcctMonth.has(c))trByAcctMonth.set(c,new Map());
+    const mm=trByAcctMonth.get(c);const e=mm.get(r._month)||{amt:0,cnt:0};
+    e.amt+=r._amountYi;e.cnt++;mm.set(r._month,e);
+  }
+  // ③ 交易天数占比
   const daySet=new Map();let minT=null,maxT=null;
   for(const r of dfAll){
     const c=toStr(r._code);if(!c||!r._date)continue;
@@ -1326,27 +1362,72 @@ function buildStyleScores(idMap,retention,dfAll){
   }
   let workdays=0;
   if(minT!=null){const d=new Date(minT);while(d.getTime()<=maxT){if(isChinaWorkday(d))workdays++;d.setDate(d.getDate()+1)}}
-  const N=STYLE_CFG.norm,W=STYLE_CFG.weights;
+  // ④ 每账户月均换手率/月均笔数（有规模数据的月份参与平均，无交易月计 0；无规模账户换手率缺失、笔数按交易月份均）
+  const tStats={};
+  for(const code of Object.keys(idMap)){
+    const sm=sizeByAcctMonth.get(code);
+    const tm=trByAcctMonth.get(code);
+    let turnover=null,count=null,avgSz=null;
+    const ea=sizeAvg.get(code);
+    if(ea&&ea.cnt>0)avgSz=ea.sum/ea.cnt;
+    if(sm&&sm.size>0){
+      const months=[...sm.keys()];
+      let tSum=0,cSum=0;
+      for(const m of months){
+        const sz=sm.get(m);const t=tm&&tm.get(m);
+        const avgYi=sz.sum/sz.cnt/1e8;
+        if(avgYi>0)tSum+=(t?t.amt:0)/avgYi;
+        cSum+=t?t.cnt:0;
+      }
+      turnover=Math.round(tSum/months.length*10000)/10000;
+      count=Math.round(cSum/months.length*100)/100;
+    }else if(tm&&tm.size>0){
+      const months=[...tm.keys()];
+      let cSum=0;for(const m of months)cSum+=tm.get(m).cnt;
+      count=Math.round(cSum/months.length*100)/100;
+    }
+    tStats[code]={turnover,count,bucket:avgSz?getSizeBucket(avgSz):null};
+  }
+  // ⑤ 规模档月均笔数均值（笔数信号的相对基准）
+  const bucketSum={};let allSum=0,allN=0;
+  for(const code of Object.keys(tStats)){
+    const ts=tStats[code];
+    if(ts.count==null)continue;
+    allSum+=ts.count;allN++;
+    if(ts.bucket){const e=bucketSum[ts.bucket]||{sum:0,n:0};e.sum+=ts.count;e.n++;bucketSum[ts.bucket]=e}
+  }
+  const overallMean=allN>0?allSum/allN:0;
+  const bucketMean={};
+  for(const[b,e]of Object.entries(bucketSum))bucketMean[b]=e.n>0?e.sum/e.n:overallMean;
+  // ⑥ 打分
   const out={};
   for(const code of Object.keys(idMap)){
-    const id=idMap[code];
+    const id=idMap[code];const ts=tStats[code];
     const sigs={};
-    if(id.turnover!=null)sigs.turnover=Math.min(id.turnover/N.turnoverFull,1);
+    if(ts.turnover!=null)sigs.turnover=Math.min(ts.turnover/N.turnoverFull,1);
     if(id.avgHold!=null)sigs.hold=Math.max(0,1-id.avgHold/N.holdFull);
-    if(retention&&retention[code]!=null)sigs.retention=1-retention[code]/100;
+    if(retention[code]!=null)sigs.retention=1-retention[code]/100;
     const ds=daySet.get(code);
     if(ds&&workdays>0)sigs.days=Math.min(ds.size/workdays/N.daysFull,1);
     if(id.bothRatio!=null)sigs.both=id.bothRatio/100;
+    if(ts.count!=null){
+      const mean=(ts.bucket&&bucketMean[ts.bucket])||overallMean;
+      if(mean>0)sigs.count=Math.min(ts.count/(STYLE_CFG.countFactor*mean),1);
+    }
+    const closed=fifo.map[code]?fifo.map[code].closed:0;
+    const daysRaw=ds&&workdays>0?Math.round(ds.size/workdays*1000)/10:null;
+    const raw={turnover:ts.turnover,avgHold:id.avgHold,retention:retention[code]!=null?retention[code]:null,days:daysRaw,both:id.bothRatio,count:ts.count,closed};
     const keys=Object.keys(sigs);
-    const raw={turnover:id.turnover,avgHold:id.avgHold,retention:retention&&retention[code]!=null?retention[code]:null,
-      days:ds&&workdays>0?Math.round(ds.size/workdays*1000)/10:null,both:id.bothRatio};
-    if(keys.length===0){out[code]={score:null,style:null,sigs,raw};continue}
+    if(keys.length===0){out[code]={score:null,style:null,sigs,raw,gated:false};continue}
     let wSum=0,acc=0;
     for(const k of keys){acc+=sigs[k]*W[k];wSum+=W[k]}
     const score=Math.round(acc/wSum*1000)/10;
-    out[code]={score,style:score>=STYLE_CFG.tradeMin?'交易型':(score<=STYLE_CFG.configMax?'配置型':'混合型'),sigs,raw};
+    let style=score>=STYLE_CFG.tradeMin?'交易型':(score<=STYLE_CFG.configMax?'配置型':'混合型');
+    let gated=false;
+    if(style==='交易型'&&closed<STYLE_CFG.minClosed){style='混合型';gated=true} // 闭合不足：只买不卖/几乎不卖，封顶混合型
+    out[code]={score,style,sigs,raw,gated};
   }
-  return out;
+  return{scores:out,bucketMean:Object.fromEntries(Object.entries(bucketMean).map(([b,m])=>[b,Math.round(m*100)/100])),overallMean:Math.round(overallMean*100)/100};
 }
 
 // ===== 持仓分析（期末横截面，描述性）=====
@@ -1466,7 +1547,7 @@ function profileRows(month){
   }
   return out;
 }
-const PROFILE_COLS=[['code','账户代码'],['name','账户名称'],['size','持仓规模(亿)'],['tag','主营标签'],['type','类型'],['style','风格'],['winRate','胜率%'],['endMV','期末市值(亿)'],['floatPnl','浮动盈亏(亿)'],['turnoverX','真实换手率'],['avgHold','平均持有(天)'],['primaryPct','一级占比%'],['fund','基金'],['xyLong','信用债-长久期'],['xyShort','信用债-非长久期'],['llLong','利率债-长久期'],['llShort','利率债-非长久期'],['conv','转债'],['abs','ABS'],['reit','REITs'],['qh','国债期货'],['xyhg','协议回购'],['zyhg','质押式回购']];
+const PROFILE_COLS=[['code','账户代码'],['name','账户名称'],['size','持仓规模(亿)'],['tag','主营标签'],['type','类型'],['style','风格'],['winRate','胜率%(笔数)'],['endMV','期末市值(亿)'],['turnoverX','月均换手率'],['avgHold','平均持有(天)'],['primaryPct','一级占比%'],['fund','基金'],['xyLong','信用债-长久期'],['xyShort','信用债-非长久期'],['llLong','利率债-长久期'],['llShort','利率债-非长久期'],['conv','转债'],['abs','ABS'],['reit','REITs'],['qh','国债期货'],['xyhg','协议回购'],['zyhg','质押式回购']];
 function tagBadge(tag){
   const cls={'另类型':'badge-amber','综合型':'badge-gray','基金型':'badge-blue','转债型':'badge-blue','长债型':'badge-green','债券型':'badge-green'}[tag]||'badge-gray';
   return`<span class="badge ${cls}">${tag}</span>`;
@@ -1487,7 +1568,7 @@ function profileTableHtml(){
   const yi=v=>v>0?Math.round(v*100)/100:'-';
   const tableRows=rows.map(a=>{
     const row=[`<span class="font-mono">${a.code}</span>`,a.name,a.size!=null?a.size:'-',tagBadge(a.tag),typeBadge(a.type),styleBadge(a.style),
-      a.winRate!=null?a.winRate:'-',yi(a.endMV),a.floatPnl!=null?a.floatPnl:'-',a.turnoverX!=null?a.turnoverX:'-',a.avgHold!=null?a.avgHold:'-',a.primaryPct!=null?a.primaryPct:'-',
+      a.winRate!=null?`${a.winRate}%（${a.closedTrips}笔）`:'-',yi(a.endMV),a.turnoverX!=null?a.turnoverX:'-',a.avgHold!=null?a.avgHold:'-',a.primaryPct!=null?a.primaryPct:'-',
       yi(a.fund),yi(a.xyLong),yi(a.xyShort),yi(a.llLong),yi(a.llShort),yi(a.conv),yi(a.abs),yi(a.reit),yi(a.qh),yi(a.xyhg),yi(a.zyhg)];
     row._code=a.code;
     return row;
@@ -1512,6 +1593,14 @@ function runAnalysis(rawHg,rawZq,rawPos,hdStart,hdEnd,salesDropped){
   // 分类映射：期末持仓明细精准匹配 → 旧格式自带列 → 标"其他"
   const classMap=buildClassMap(hdEnd);
   const classResult=applyClassification(dfZq,classMap);
+  // 期限口径统一：债券记录改用「期末持仓明细·剩余期限(年)」；查不到或≤0（期内到期）置 null，期限结构图归 0-1 年档
+  const termMap=new Map();
+  for(const b of hdEnd.bonds){if(b.code&&b.remain>0&&!termMap.has(b.code))termMap.set(b.code,b.remain)}
+  for(const r of dfZq){
+    const rt=termMap.get(toStr(r['代码']));
+    r._term=rt>0?rt:null;
+    r._termBucket=getTermBucket(r._term);
+  }
   // 数据质量过滤：命中「过滤」规则的记录从所有统计中剔除，在「数据质量」页留痕
   const dq=applyDataQuality(dfHg,dfZq,dfPos);
   const dfHgClean=dq.hgClean;
@@ -1581,7 +1670,20 @@ function runAnalysis(rawHg,rawZq,rawPos,hdStart,hdEnd,salesDropped){
   }
   const repoAnalysis=buildRepoAnalysis(dfHgClean,deptByCode);
   const traderAnalysis=buildTraderAnalysis(dfHgClean);
-  const deptSummary=buildDeptSummary(dfPosClean,dfAllTrade);
+  const deptSummary=buildDeptSummary(dfPosClean,dfAllTrade,activeCodesSet);
+  // 数据质量标注：流水有交易但持仓规模表缺失的账户（换手率分母/规模比对对它们不可用）
+  const posCodeSet=new Set();
+  for(const r of dfPosClean){const c=toStr(r._code);if(c)posCodeSet.add(c)}
+  const noPosAccounts=[];
+  for(const r of dfAll){
+    const c=toStr(r._code);
+    if(!c||posCodeSet.has(c))continue;
+    const ex=noPosAccounts.find(a=>a.code===c);
+    if(ex){ex.amount+=r._amountYi;ex.count++}
+    else noPosAccounts.push({code:c,name:toStr(r._name)||c,amount:r._amountYi,count:1});
+  }
+  noPosAccounts.sort((a,b)=>b.amount-a.amount);
+  for(const a of noPosAccounts)a.amount=Math.round(a.amount*100)/100;
   const netBuy=buildNetBuy(dfZqTrade);
   const varietyComp=buildVarietyComp(dfHgClean,dfZqTrade);
   const monthlyActive=buildMonthlyActiveAccounts(dfAll);
@@ -1590,12 +1692,14 @@ function runAnalysis(rawHg,rawZq,rawPos,hdStart,hdEnd,salesDropped){
   // 持仓明细驱动的新分析
   const fifo=buildFifo(dfZqTrade,hdStart);
   const identity=buildAccountIdentity(dfZqTrade,hdStart,hdEnd,fifo,dfPosClean,activeCodesSet);
-  // 多维打分：覆盖 idMap 中的 style 为模型判定结果
-  const styleScores=buildStyleScores(identity.idMap,fifo.retention,dfAll);
+  // 多维打分（六信号+闭合门槛）；同时把画像用的换手率回写为月均口径
+  const styleResult=buildStyleScores(identity.idMap,fifo,dfZqTrade,dfPosClean,dfAll);
+  const styleScores=styleResult.scores;
   for(const code of Object.keys(identity.idMap)){
     const s=styleScores[code];
     if(s&&s.style){identity.idMap[code].style=s.style;identity.idMap[code].styleScore=s.score}
     else if(s){identity.idMap[code].style=null;identity.idMap[code].styleScore=null}
+    if(s&&s.raw&&s.raw.turnover!=null)identity.idMap[code].turnover=s.raw.turnover;
   }
   const holdingsAnalysis=buildHoldingsAnalysis(hdEnd);
 
@@ -1609,7 +1713,7 @@ function runAnalysis(rawHg,rawZq,rawPos,hdStart,hdEnd,salesDropped){
   const summary={totalHg,totalZq,totalAccounts,totalAmount,hgAmount,zqAmount,dqFiltered,hasPosition:dfPosClean.length>0&&posOverview.hasData};
 
   return{
-    summary,hgTop10,bondTop10,xyhgTop10,longTermTop10,fundTop10,zqTop10,qhTop10,absTop10,reitTop10,traderAnalysis,styleScores,
+    summary,hgTop10,bondTop10,xyhgTop10,longTermTop10,fundTop10,zqTop10,qhTop10,absTop10,reitTop10,traderAnalysis,styleScores,styleMeta:{bucketMean:styleResult.bucketMean,overallMean:styleResult.overallMean},noPosAccounts,
     deepByCat,monthlyTrend,termStructure,anomalies,lowActivity,
     posOverview,posTimeSeries,posHealth,sizeCategory,posMissingReport,
     turnoverAnalysis,concentration,repoAnalysis,deptSummary,netBuy,
@@ -1730,26 +1834,36 @@ function renderAllTabs(result){
 function renderOverviewTab(r){
   const lc=r.lifecycle;
   let html='';
-  // 固收+ / 纯债（置顶板块）：账户全集 = 回购池+债券池全部记录代码去重；期末/期初持仓优先判定，无持仓明细的账户只要有转债/基金/REITs 交易即固收+
+  // 固收+ / 纯债（置顶板块）：交易流水去重账户为基准，分别链接期初/期末持仓明细取交集；持仓优先判定，在表但空仓（市值全0）用交易流水兜底
   if(r.identity&&r.identity.typeCounts){
     const tc=r.identity.typeCounts;
     const comp=r.identity.endComp||{conv:0,fund:0,reit:0};
-    let newPlus=0,newPure=0;
-    if(lc){
-      for(const a of lc.newList){
-        const id=r.identity.idMap[a.code];
-        if(id&&id.type==='固收+')newPlus++;else newPure++;
-      }
-    }
-    const totE=tc.end['固收+']+tc.end['纯债'],totS=tc.start['固收+']+tc.start['纯债'];
+    const nl=r.identity.newList||[];
+    const newPlus=nl.filter(a=>a.type==='固收+').length,newPure=nl.length-newPlus;
+    const totE=r.identity.endN||(tc.end['固收+']+tc.end['纯债']),totS=r.identity.startN||(tc.start['固收+']+tc.start['纯债']);
     const pct=(n,t)=>t>0?(n/t*100).toFixed(1)+'%':'-';
-    html+=`<div class="section-title" style="margin-top:0">固收+ / 纯债（账户全集 ${r.identity.universe||totE} 个：回购+债券池全部记录去重；持仓明细优先，无持仓看交易——有转债/基金/REITs 交易即固收+）</div><div class="stats-grid">
-      <div class="stat-card"><div class="stat-label">期末截面</div><div class="stat-value" style="font-size:18px">固收+ ${tc.end['固收+']} · 纯债 ${tc.end['纯债']}</div><div class="stat-sub">${r.inputInfo&&r.inputInfo.hdEndLabel||''}</div></div>
-      <div class="stat-card"><div class="stat-label">期初截面</div><div class="stat-value" style="font-size:18px">固收+ ${tc.start['固收+']} · 纯债 ${tc.start['纯债']}</div><div class="stat-sub">${r.inputInfo&&r.inputInfo.hdStartLabel||''}</div></div>
+    html+=`<div class="section-title" style="margin-top:0">固收+ / 纯债（交易账户 ${r.identity.universe} 个为基准；截面卡=交易账户∩对应截面持仓明细，空仓户按交易流水兜底）</div><div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">期末截面（${totE} 个账户）</div><div class="stat-value" style="font-size:18px">固收+ ${tc.end['固收+']} · 纯债 ${tc.end['纯债']}</div><div class="stat-sub">${r.inputInfo&&r.inputInfo.hdEndLabel||''}</div></div>
+      <div class="stat-card"><div class="stat-label">期初截面（${totS} 个账户）</div><div class="stat-value" style="font-size:18px">固收+ ${tc.start['固收+']} · 纯债 ${tc.start['纯债']}</div><div class="stat-sub">${r.inputInfo&&r.inputInfo.hdStartLabel||''}</div></div>
       <div class="stat-card"><div class="stat-label">固收+ 账户占比</div><div class="stat-value" style="font-size:18px">期末 ${pct(tc.end['固收+'],totE)} · 期初 ${pct(tc.start['固收+'],totS)}</div><div class="stat-sub">期末较期初 ${tc.end['固收+']-tc.start['固收+']>=0?'+':''}${tc.end['固收+']-tc.start['固收+']} 个固收+账户</div></div>
       <div class="stat-card"><div class="stat-label">固收+ 构成（期末，可重叠）</div><div class="stat-value" style="font-size:18px">转债 ${comp.conv} · 基金 ${comp.fund} · REITs ${comp.reit}</div><div class="stat-sub">含对应品种持仓或交易的固收+账户数</div></div>
-      <div class="stat-card"><div class="stat-label">新开账户类型</div><div class="stat-value" style="font-size:18px">固收+ ${newPlus} · 纯债 ${newPure}</div><div class="stat-sub">增量方向看固收+趋势</div></div>
+      <div class="stat-card"><div class="stat-label">新开账户类型（期末在册且期初不在册 ${nl.length} 个）</div><div class="stat-value" style="font-size:18px">固收+ ${newPlus} · 纯债 ${newPure}</div><div class="stat-sub">增量方向看固收+趋势</div></div>
     </div>`;
+  }
+  // 规模概览（月度趋势上方）：交易流水去重账户 ∩ 持仓规模表
+  const po=r.posOverview;
+  if(po&&po.hasData){
+    html+=`<div class="section-title" style="margin-top:24px">规模概览（有规模数据 = 交易账户 ∩ 持仓规模表，共 ${po.summary.accountCount} 个）</div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">平均规模</div><div class="stat-value">${po.summary.avgSize.toFixed(2)}</div><div class="stat-sub">亿元</div></div>
+      <div class="stat-card"><div class="stat-label">最大规模</div><div class="stat-value">${po.summary.maxSize.toFixed(2)}</div><div class="stat-sub">亿元</div></div>
+      <div class="stat-card"><div class="stat-label">中位规模</div><div class="stat-value">${po.summary.medSize.toFixed(2)}</div><div class="stat-sub">亿元</div></div>
+      <div class="stat-card"><div class="stat-label">数据区间</div><div class="stat-value" style="font-size:14px;">${po.dateRange}</div></div>
+    </div>`;
+    if(r.deptSummary&&r.deptSummary.length>0){
+      html+=`<div class="card"><div class="card-header"><div class="card-title">部门汇总</div></div><div class="card-body">${renderTable(['账户归属','账户数','最新规模合计(亿元)','资产总值合计(亿元)','平均杠杆率','交易总额(亿元)'],r.deptSummary.map(d=>[d.dept,d.accounts,d.size,d.total,d.avgLev!=null?`${d.avgLev.toFixed(1)}%`:'-',d.trade]))}</div></div>`;
+    }
+    html+=`<div class="card"><div class="card-header"><div class="card-title">规模分布</div></div><div class="card-body"><div id="chart-size-dist" class="chart"></div></div></div>`;
   }
   html+=`<div class="card"><div class="card-header"><div class="card-title">月度交易趋势</div></div><div class="card-body"><div id="chart-trend" class="chart-large"></div></div></div>
     <div class="card"><div class="card-header"><div class="card-title">月度净买入方向（买入 − 卖出，亿元）</div></div><div class="card-body"><div id="chart-netbuy" class="chart-large"></div></div></div>
@@ -1767,25 +1881,6 @@ function renderOverviewTab(r){
       <div class="card"><div class="card-header"><div class="card-title">回购业务金额 Top5</div></div><div class="card-body">${renderTable(['排名','账户代码','账户名称','金额(亿元)','笔数'],r.hgTop10.byValue.slice(0,5).map((a,i)=>[i+1,`<span class="font-mono">${a.code}</span>`,a.name,a.amount,a.count]))}</div></div>
       <div class="card"><div class="card-header"><div class="card-title">债券交易金额 Top5（全部债券业务）</div></div><div class="card-body">${renderTable(['排名','账户代码','账户名称','金额(亿元)','笔数'],r.bondTop10.byValue.slice(0,5).map((a,i)=>[i+1,`<span class="font-mono">${a.code}</span>`,a.name,a.amount,a.count]))}</div></div>
     </div>`;
-  // 规模概览（原持仓规模页的整体数据模块）
-  const po=r.posOverview;
-  if(po&&po.hasData){
-    html+=`<div class="section-title" style="margin-top:24px">规模概览（持仓规模数据，只统计有交易的活跃账户）</div>
-    <div class="stats-grid">
-      <div class="stat-card"><div class="stat-label">有规模数据的账户</div><div class="stat-value">${po.summary.accountCount}</div></div>
-      <div class="stat-card"><div class="stat-label">平均规模</div><div class="stat-value">${po.summary.avgSize.toFixed(2)}</div><div class="stat-sub">亿元</div></div>
-      <div class="stat-card"><div class="stat-label">最大规模</div><div class="stat-value">${po.summary.maxSize.toFixed(2)}</div><div class="stat-sub">亿元</div></div>
-      <div class="stat-card"><div class="stat-label">中位规模</div><div class="stat-value">${po.summary.medSize.toFixed(2)}</div><div class="stat-sub">亿元</div></div>
-      ${po.summary.avgNav!=null?`<div class="stat-card"><div class="stat-label">平均净值</div><div class="stat-value">${po.summary.avgNav.toFixed(4)}</div></div>`:''}
-      <div class="stat-card"><div class="stat-label">数据区间</div><div class="stat-value" style="font-size:14px;">${po.dateRange}</div></div>
-    </div>`;
-    if(r.deptSummary&&r.deptSummary.length>0){
-      html+=`<div class="card"><div class="card-header"><div class="card-title">部门汇总</div></div><div class="card-body">${renderTable(['账户归属','账户数','最新规模合计(亿元)','资产总值合计(亿元)','平均杠杆率','交易总额(亿元)'],r.deptSummary.map(d=>[d.dept,d.accounts,d.size,d.total,d.avgLev!=null?`${d.avgLev.toFixed(1)}%`:'-',d.trade]))}</div></div>`;
-    }
-    html+=`<div class="card"><div class="card-header"><div class="card-title">规模分布</div></div><div class="card-body"><div id="chart-size-dist" class="chart"></div></div></div>
-    <div class="card"><div class="card-header"><div class="card-title">规模与交易品种关联</div></div><div class="card-body">${r.sizeCategory.length>0?renderTable(['规模档位','账户数','交易总额(亿元)','主要交易品种'],r.sizeCategory.map(sc=>[sc.bucket,sc.accountCount,sc.totalAmount,sc.topBiz.map(b=>`${b.biz} ${b.amount.toFixed(2)}亿`).join(', ')||'-'])):'<div class="empty-state">暂无数据</div>'}</div></div>`;
-    if(r.posTimeSeries.series.length>0){html+=`<div class="card"><div class="card-header"><div class="card-title">账户规模时序（前5个账户）</div></div><div class="card-body"><div id="chart-pos-ts" class="chart-large"></div></div></div>`}
-  }
   return html;
 }
 
@@ -1852,6 +1947,11 @@ function renderBehaviorTab(r){
       html+=`</div></details>`;
     }
   }
+  if(r.lowActivity&&r.lowActivity.length>0){
+    html+=`<details class="collapsible"><summary>低活跃度账户（交易笔数 ≤ 2，共 ${r.lowActivity.length} 个）</summary><div class="collapsible-body">
+      ${renderPaginatedTable('lowact',['账户代码','账户名称','交易笔数','交易总额(亿元)','涉及品种'],r.lowActivity.map(a=>[`<span class="font-mono">${a.code}</span>`,a.name,a.count,Math.round(a.totalAmount*100)/100,a.items.slice(0,5).join(', ')||'-']),{rowClass:()=>'low-activity-row'})}
+    </div></details>`;
+  }
   return html;
 }
 
@@ -1902,31 +2002,43 @@ function onTraderFilter(name){
 
 function renderTypeTab(r){
   const t=r.turnoverAnalysis;
-  profileRows('all'); // 确保 nameMap/tagMap 就绪（供本页与做得怎么样页取账户名）
+  profileRows('all'); // 确保 nameMap 就绪
   const idMap=r.identity&&r.identity.idMap||{};
   const ss=r.styleScores||{};
-  const retention=r.fifo&&r.fifo.retention||{};
-  const nm=code=>profileState.nameMap&&profileState.nameMap.get(code)||code;
-  const scored=[];
   const dist={'交易型':0,'混合型':0,'配置型':0};
-  for(const code of Object.keys(idMap)){
-    const s=ss[code];
-    if(!s||s.score==null)continue;
+  const distSize={'交易型':0,'混合型':0,'配置型':0};
+  const cross={'固收+':{'交易型':0,'混合型':0,'配置型':0},'纯债':{'交易型':0,'混合型':0,'配置型':0}};
+  const latestSize=new Map();
+  for(const p of r._store.pos){const c=toStr(p._code);if(!c||!p._date)continue;const ex=latestSize.get(c);if(!ex||p._date>ex._date)latestSize.set(c,p)}
+  for(const code of Object.keys(ss)){
+    const s=ss[code];if(!s||!s.style)continue;
     dist[s.style]++;
-    scored.push({code,name:nm(code),raw:s.raw,score:s.score,style:s.style});
+    const sz=latestSize.get(code);
+    if(sz)distSize[s.style]+=sz._size/1e8;
+    const tp=idMap[code]&&idMap[code].type;
+    if(tp&&cross[tp])cross[tp][s.style]++;
   }
-  scored.sort((a,b)=>b.score-a.score);
-  const fmt=(v,suf)=>v!=null?v+(suf||''):'-';
+  const totStyle=dist['交易型']+dist['混合型']+dist['配置型'];
+  const totSize=distSize['交易型']+distSize['混合型']+distSize['配置型'];
   const W=STYLE_CFG.weights,N=STYLE_CFG.norm;
+  const bm=r.styleMeta&&r.styleMeta.bucketMean||{};
+  const bmRows=Object.entries(bm).map(([b,m])=>[b,`${m} 笔/月`]);
   let html=`<div class="card"><div class="card-header"><div class="card-title">配置型 / 交易型判定（多维打分模型）</div></div><div class="card-body">
-    <p style="color:#64748b;font-size:13px;margin-bottom:12px">五个信号加权得分（0-100，越像交易型分越高）：真实换手率（权重${W.turnover*100}%，≥${N.turnoverFull} 满分）· 平均持有天数（${W.hold*100}%，≥${N.holdFull} 天计 0 分）· 期初持仓留存率（${W.retention*100}%，FIFO 口径：卖出先冲期初批）· 交易天数占比（${W.days*100}%，≥${N.daysFull*100}% 满分）· 买卖双向率（${W.both*100}%）。缺失信号跳过、权重自动归一。得分 ≥${STYLE_CFG.tradeMin} = 交易型，≤${STYLE_CFG.configMax} = 配置型，其余混合型。</p>
+    <p style="color:#64748b;font-size:13px;margin-bottom:12px">六个信号加权得分（0-100，越像交易型分越高）：月均换手率（权重${W.turnover*100}%，当月买卖额÷当月日均规模取各月平均，无交易月计 0，月均≥${N.turnoverFull} 满分）· 平均持有天数（${W.hold*100}%，FIFO 面额加权，期初批按「卖出日−期初」下限，≥${N.holdFull} 天计 0 分，闭合≥3 笔才出值）· 期初持仓留存率（${W.retention*100}%，卖出先冲期初批）· 交易天数占比（${W.days*100}%，≥${N.daysFull*100}% 满分）· 买卖双向率（${W.both*100}%）· 月均笔数（${W.count*100}%，与同规模档均值比较，达 ${STYLE_CFG.countFactor} 倍满分）。缺失信号跳过、权重自动归一。<strong>判定规则：得分 ≥${STYLE_CFG.tradeMin} 且闭合往返 ≥${STYLE_CFG.minClosed} 笔 = 交易型（只买不卖封顶混合型）；≤${STYLE_CFG.configMax} = 配置型；其余混合型。</strong></p>
+    ${bmRows.length>0?`<div class="section-title" style="margin-top:0">各规模档月均笔数基准（笔数信号的相对参照）</div>${renderTable(['规模档','月均笔数均值'],bmRows)}`:''}
+    <div class="section-title">类型分布</div>
     <div class="stats-grid">
-      <div class="stat-card"><div class="stat-label">交易型</div><div class="stat-value" style="color:#b45309">${dist['交易型']}</div></div>
-      <div class="stat-card"><div class="stat-label">混合型</div><div class="stat-value" style="color:#475569">${dist['混合型']}</div></div>
-      <div class="stat-card"><div class="stat-label">配置型</div><div class="stat-value" style="color:#166534">${dist['配置型']}</div></div>
-      <div class="stat-card"><div class="stat-label">参与判定账户</div><div class="stat-value">${scored.length}</div><div class="stat-sub">信号全无的账户不出判定</div></div>
+      <div class="stat-card"><div class="stat-label">交易型</div><div class="stat-value" style="color:#b45309">${dist['交易型']}</div><div class="stat-sub">规模 ${distSize['交易型'].toFixed(1)} 亿（${totSize>0?(distSize['交易型']/totSize*100).toFixed(0):'-'}%）</div></div>
+      <div class="stat-card"><div class="stat-label">混合型</div><div class="stat-value" style="color:#475569">${dist['混合型']}</div><div class="stat-sub">规模 ${distSize['混合型'].toFixed(1)} 亿（${totSize>0?(distSize['混合型']/totSize*100).toFixed(0):'-'}%）</div></div>
+      <div class="stat-card"><div class="stat-label">配置型</div><div class="stat-value" style="color:#166534">${dist['配置型']}</div><div class="stat-sub">规模 ${distSize['配置型'].toFixed(1)} 亿（${totSize>0?(distSize['配置型']/totSize*100).toFixed(0):'-'}%）</div></div>
+      <div class="stat-card"><div class="stat-label">参与判定账户</div><div class="stat-value">${totStyle}</div><div class="stat-sub">信号全无的账户不出判定</div></div>
     </div>
-    ${renderPaginatedTable('styleTbl',['排名','账户代码','账户名称','换手率','平均持有(天)','期初留存率%','交易天数占比%','买卖双向率%','得分','判定'],scored.map((a,i)=>[i+1,`<span class="font-mono">${a.code}</span>`,a.name,fmt(a.raw.turnover),fmt(a.raw.avgHold),fmt(a.raw.retention),fmt(a.raw.days),fmt(a.raw.both),`<strong>${a.score}</strong>`,styleBadge(a.style)]),{rowClass:row=>row[9].includes('交易型')?'low-activity-row':'',per:20})}
+    <div class="section-title" style="margin-top:16px">固收+/纯债 × 类型 交叉分布</div>
+    ${renderTable(['','交易型','混合型','配置型'],[['固收+',cross['固收+']['交易型'],cross['固收+']['混合型'],cross['固收+']['配置型']],['纯债',cross['纯债']['交易型'],cross['纯债']['混合型'],cross['纯债']['配置型']]])}
+  </div></div>
+  <div class="card"><div class="card-header"><div class="card-title">账户判定查询</div></div><div class="card-body">
+    <input id="styleQueryInput" type="text" placeholder="输入账户代码或名称，回车查看判定卡" style="width:100%;max-width:420px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px" onkeydown="if(event.key==='Enter')onStyleQuery()">
+    <div id="styleQueryOut" style="margin-top:12px"></div>
   </div></div>`;
   if(t&&t.accountTurnover.length>0){
     html+=`<div class="card"><div class="card-header"><div class="card-title">月度换手率分析（回购不计入）</div></div><div class="card-body">
@@ -1936,27 +2048,43 @@ function renderTypeTab(r){
       ${renderTable(['规模档位','账户数','平均买入换手率','平均卖出换手率'],t.byBucket.map(b=>[b.bucket,b.count,b.avgBuy,b.avgSell]))}
     </div></div>`;
   }
-  if(r.lifecycle){
-    const lc=r.lifecycle;
-    html+=`<div class="card"><div class="card-header"><div class="card-title">账户生命周期</div></div><div class="card-body">
-      <div class="stats-grid" style="margin-bottom:16px">
-        <div class="stat-card"><div class="stat-label">活跃</div><div class="stat-value" style="color:#166534">${lc.counts['活跃']}</div></div>
-        <div class="stat-card"><div class="stat-label">新开</div><div class="stat-value" style="color:#1d4ed8">${lc.counts['新开']}</div></div>
-        <div class="stat-card"><div class="stat-label">不活跃</div><div class="stat-value" style="color:#92400e">${lc.counts['不活跃']}</div></div>
-        <div class="stat-card"><div class="stat-label">疑似关闭</div><div class="stat-value" style="color:#b91c1c">${lc.counts['疑似关闭']}</div></div>
-      </div>
-      <p style="color:#64748b;font-size:13px;margin-bottom:12px">状态定义：新开 = 首次出现晚于数据期初5个工作日以上；不活跃 = 有持仓但连续10个交易日无交易；疑似关闭 = 持仓数据在期末前10个交易日以上停止更新；其余为活跃</p>
-      ${lc.newList.length>0?`<div class="section-title">新开账户（${lc.totals.newTotal} 个）</div>${renderPaginatedTable('lcNew',['账户代码','账户名称','账户归属','首次出现','最新规模(亿元)'],lc.newList.map(a=>[`<span class="font-mono">${a.code}</span>`,a.name,a.belong,a.first,a.size]))}`:''}
-      ${lc.inactiveList.length>0?`<div class="section-title">不活跃账户（${lc.totals.inactiveTotal} 个，按规模排序）</div>${renderPaginatedTable('lcInactive',['账户代码','账户名称','账户归属','最后持仓日期','最新规模(亿元)'],lc.inactiveList.map(a=>[`<span class="font-mono">${a.code}</span>`,a.name,a.belong,a.last,a.size]),{rowClass:()=>'low-activity-row'})}`:''}
-      ${lc.closedList.length>0?`<div class="section-title">疑似关闭账户（${lc.totals.closedTotal} 个）</div>${renderPaginatedTable('lcClosed',['账户代码','账户名称','账户归属','最后持仓日期','最后规模(亿元)'],lc.closedList.map(a=>[`<span class="font-mono">${a.code}</span>`,a.name,a.belong,a.last,a.size]),{rowClass:()=>'anomaly-row'})}`:''}
-    </div></div>`;
-  }
-  if(r.lowActivity&&r.lowActivity.length>0){
-    html+=`<details class="collapsible"><summary>低活跃度账户（交易笔数 ≤ 2，共 ${r.lowActivity.length} 个）</summary><div class="collapsible-body">
-      ${renderPaginatedTable('lowact',['账户代码','账户名称','交易笔数','交易总额(亿元)','涉及品种'],r.lowActivity.map(a=>[`<span class="font-mono">${a.code}</span>`,a.name,a.count,Math.round(a.totalAmount*100)/100,a.items.slice(0,5).join(', ')||'-']),{rowClass:()=>'low-activity-row'})}
-    </div></details>`;
-  }
   return html;
+}
+
+// 账户判定查询：输入代码/名称 → 判定卡（六信号原值+得分+判定+边界提示）
+function onStyleQuery(){
+  const el=document.getElementById('styleQueryInput');
+  const out=document.getElementById('styleQueryOut');
+  if(!el||!out)return;
+  const q=el.value.trim();
+  if(!q){out.innerHTML='';return}
+  const cands=findAccountCandidates(q);
+  if(!cands.length){out.innerHTML='<div class="empty-state">未找到匹配账户</div>';return}
+  const code=cands[0].code;
+  const r=currentResult;
+  const s=r.styleScores&&r.styleScores[code];
+  const id=r.identity&&r.identity.idMap&&r.identity.idMap[code];
+  if(!s||s.score==null){out.innerHTML=`<div class="empty-state">${code} 信号不足，未出判定（无任何可用信号）</div>`;return}
+  const nm=profileState.nameMap&&profileState.nameMap.get(code)||code;
+  const fmt=(v,suf)=>v!=null?`${v}${suf||''}`:'<span style="color:#94a3b8">缺失</span>';
+  const edge=(s.score>=STYLE_CFG.tradeMin-5&&s.score<STYLE_CFG.tradeMin)||(s.score>STYLE_CFG.configMax&&s.score<=STYLE_CFG.configMax+5);
+  out.innerHTML=`<div class="account-detail">
+    <div class="detail-header"><span class="font-mono">${code}</span> ${nm} ${id&&id.type?typeBadge(id.type):''} ${styleBadge(s.style)}
+      <span style="margin-left:12px">得分: <strong>${s.score}</strong></span>
+      ${s.gated?'<span class="badge badge-amber">闭合往返不足 '+STYLE_CFG.minClosed+' 笔，封顶混合型</span>':''}
+      ${edge&&!s.gated?'<span class="badge badge-amber">边界账户（阈值±5 缓冲区），建议人工复核</span>':''}
+    </div>
+    <div class="detail-row" style="flex-wrap:wrap;gap:16px;margin-top:8px">
+      <span>月均换手率: <strong>${fmt(s.raw.turnover)}</strong></span>
+      <span>平均持有: <strong>${fmt(s.raw.avgHold,' 天')}</strong></span>
+      <span>期初留存率: <strong>${fmt(s.raw.retention,'%')}</strong></span>
+      <span>交易天数占比: <strong>${fmt(s.raw.days,'%')}</strong></span>
+      <span>买卖双向率: <strong>${fmt(s.raw.both,'%')}</strong></span>
+      <span>月均笔数: <strong>${fmt(s.raw.count)}</strong></span>
+      <span>闭合往返: <strong>${s.raw.closed} 笔</strong></span>
+    </div>
+    <div style="margin-top:10px"><a href="javascript:void(0)" onclick="document.querySelector('[data-tab=\\'behavior\\']')&&switchTab('behavior');showAccountProfile('${code}')" style="font-size:13px;color:#1d4ed8">查看完整画像 →</a></div>
+  </div>`;
 }
 
 function bondSectionsHtml(acct){
@@ -2062,9 +2190,9 @@ function buildAccountProfileHtml(code){
     </div>
     <div class="grid-2" style="margin-top:12px">
       <div class="account-detail"><div class="detail-header">品种构成（金额，不含回购）</div><div id="${sid}-comp" style="width:100%;height:220px"></div></div>
-      <div class="account-detail"><div class="detail-header">月度交易金额（亿元）</div><div id="${sid}-month" style="width:100%;height:220px"></div></div>
+      <div class="account-detail"><div class="detail-header">月度交易金额：纯债类 vs 固收+类（亿元，不含回购/期货）</div><div id="${sid}-month" style="width:100%;height:220px"></div></div>
     </div>
-    ${posAll.length?`<div class="account-detail" style="margin-top:12px"><div class="detail-header">持仓规模 & 杠杆率走势</div><div id="${sid}-pos" style="width:100%;height:220px"></div></div>`:''}
+    ${posAll.length?`<div class="account-detail" style="margin-top:12px"><div class="detail-header">持仓规模 & 累计单位净值走势</div><div id="${sid}-pos" style="width:100%;height:220px"></div></div>`:''}
     <div style="margin-top:12px">${bondSectionsHtml(acct)}</div>`;
 }
 buildAccountProfileHtml.seq=0;
@@ -2087,18 +2215,24 @@ function initProfileCharts(sid,code){
   }
   const monthEl=document.getElementById(sid+'-month');
   if(monthEl){
-    const mSet=new Set();const hgM=new Map();const zqM=new Map();
-    for(const x of r._store.hg){if(toStr(x._code)!==code||!x._month)continue;mSet.add(x._month);hgM.set(x._month,(hgM.get(x._month)||0)+x._amountYi)}
-    for(const x of r._store.zq){if(toStr(x._code)!==code||!x._month)continue;mSet.add(x._month);zqM.set(x._month,(zqM.get(x._month)||0)+x._amountYi)}
+    // 月度交易金额：纯债类（现券：利率债/信用债/ABS）vs 固收+类（基金/REITs/转债）；不含回购与期货
+    const mSet=new Set();const pureM=new Map();const plusM=new Map();
+    for(const x of r._store.zq){
+      if(toStr(x._code)!==code||!x._month)continue;
+      const c=zqCategory(x);
+      if(c==='利率债'||c==='信用债'||c==='ABS'){mSet.add(x._month);pureM.set(x._month,(pureM.get(x._month)||0)+x._amountYi)}
+      else if(c==='基金'||c==='REITs'||c==='转债'){mSet.add(x._month);plusM.set(x._month,(plusM.get(x._month)||0)+x._amountYi)}
+    }
     const months=Array.from(mSet).sort();
     const chart=echarts.init(monthEl);
-    chart.setOption({tooltip:{trigger:'axis'},legend:{data:['回购','现券/基金/期货']},grid:{left:'3%',right:'4%',bottom:'3%',containLabel:true},xAxis:{type:'category',data:months},yAxis:{type:'value',name:'亿元'},series:[{name:'回购',type:'bar',data:months.map(m=>Math.round((hgM.get(m)||0)*100)/100),color:'#3b82f6'},{name:'现券/基金/期货',type:'bar',data:months.map(m=>Math.round((zqM.get(m)||0)*100)/100),color:'#10b981'}]});
+    chart.setOption({tooltip:{trigger:'axis'},legend:{data:['纯债类（现券）','固收+类（基金/REITs/转债）']},grid:{left:'3%',right:'4%',bottom:'3%',containLabel:true},xAxis:{type:'category',data:months},yAxis:{type:'value',name:'亿元'},series:[{name:'纯债类（现券）',type:'bar',data:months.map(m=>Math.round((pureM.get(m)||0)*100)/100),color:'#1d4ed8'},{name:'固收+类（基金/REITs/转债）',type:'bar',data:months.map(m=>Math.round((plusM.get(m)||0)*100)/100),color:'#f59e0b'}]});
   }
   const posEl=document.getElementById(sid+'-pos');
   if(posEl){
+    // 规模 & 累计单位净值走势；y 轴 scale:true 自适应（小规模账户也能看清波动）
     const rows=r._store.pos.filter(x=>toStr(x._code)===code&&x._dateStr&&x._size>0).sort((a,b)=>(a._date?a._date.getTime():0)-(b._date?b._date.getTime():0));
     const chart=echarts.init(posEl);
-    chart.setOption({tooltip:{trigger:'axis'},legend:{data:['规模(亿)','杠杆率(%)']},grid:{left:'3%',right:'6%',bottom:'3%',containLabel:true},xAxis:{type:'category',data:rows.map(x=>x._dateStr)},yAxis:[{type:'value',name:'亿元'},{type:'value',name:'%'}],series:[{name:'规模(亿)',type:'line',data:rows.map(x=>Math.round(x._size/1e8*100)/100),color:'#1d4ed8',smooth:true,connectNulls:true},{name:'杠杆率(%)',type:'line',yAxisIndex:1,data:rows.map(x=>x._lev!=null?Math.round(x._lev*1000)/10:null),color:'#f59e0b',smooth:true,connectNulls:true}]});
+    chart.setOption({tooltip:{trigger:'axis'},legend:{data:['规模(亿)','累计单位净值']},grid:{left:'3%',right:'6%',bottom:'3%',containLabel:true},xAxis:{type:'category',data:rows.map(x=>x._dateStr)},yAxis:[{type:'value',name:'亿元',scale:true},{type:'value',name:'净值',scale:true}],series:[{name:'规模(亿)',type:'line',data:rows.map(x=>Math.round(x._size/1e8*100)/100),color:'#1d4ed8',smooth:true,connectNulls:true},{name:'累计单位净值',type:'line',yAxisIndex:1,data:rows.map(x=>x._nav!=null?x._nav:null),color:'#f59e0b',smooth:true,connectNulls:true}]});
   }
 }
 
@@ -2262,6 +2396,13 @@ function renderDqTab(r){
       ${info.salesDropped>0?`<p style="font-size:13px;color:#64748b;margin-bottom:8px">🏷️ 销售户：内部证券账户名称含「销售户」的记录已剔除 <strong>${info.salesDropped.toLocaleString()}</strong> 条（按规则不参与任何分析）</p>`:''}
       ${info.unmapped>0?`<p style="font-size:13px;color:#64748b;margin-bottom:8px">🔎 未识别品种：期末持仓明细中匹配不到、已标为「其他」的交易 <strong>${info.unmapped.toLocaleString()}</strong> 条，涉及代码 ${info.unmappedCodes.length} 个</p>
       <details><summary style="cursor:pointer;font-size:13px;color:#1d4ed8">查看未识别代码清单</summary><p style="font-size:12px;color:#64748b;margin-top:8px;line-height:1.8">${info.unmappedCodes.slice(0,300).join('、')}${info.unmappedCodes.length>300?' …':''}</p></details>`:''}
+    </div></div>`;
+  }
+  // 标注：流水有交易但持仓规模表缺失的账户
+  if(r.noPosAccounts&&r.noPosAccounts.length>0){
+    html+=`<div class="card"><div class="card-header"><div class="card-title">无持仓规模数据的交易账户 <span class="badge badge-amber">${r.noPosAccounts.length} 个</span></div></div><div class="card-body">
+      <p style="color:#64748b;font-size:13px;margin-bottom:12px;">以下账户在交易流水中有记录，但未出现在持仓规模表中。它们的换手率分母、单笔金额/规模比对（R1/R2）、杠杆率等规模类分析均不可用，请确认是账户编码不一致还是规模表缺报。</p>
+      ${renderPaginatedTable('noPos',['账户代码','账户名称','交易笔数','交易金额(亿元)'],r.noPosAccounts.map(a=>[`<span class="font-mono">${a.code}</span>`,a.name,a.count,a.amount]))}
     </div></div>`;
   }
   // 持仓数据完整性（原持仓规模页模块，属数据质量范畴）
