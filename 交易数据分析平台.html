@@ -495,7 +495,7 @@ function buildMonthlyTrend(dfHg,dfZq){
   const monthsSet=new Set();
   for(const r of[...dfHg,...dfZq]){if(r._month)monthsSet.add(r._month)}
   const months=Array.from(monthsSet).sort();
-  const trend=months.map(m=>({month:m,hg:Math.round(dfHg.filter(r=>r._month===m).reduce((s,r)=>s+r._amountYi,0)*10000)/10000,zq:Math.round(dfZq.filter(r=>r._month===m).reduce((s,r)=>s+r._amountYi,0)*10000)/10000,fund:Math.round(dfZq.filter(r=>r._month===m&&(toStr(r._biz).includes('基金')||toStr(r._variety).includes('基金'))).reduce((s,r)=>s+r._amountYi,0)*10000)/10000,zqConv:Math.round(dfZq.filter(r=>r._month===m&&(toStr(r._biz).includes('转债')||toStr(r._bondType).includes('转债'))).reduce((s,r)=>s+r._amountYi,0)*10000)/10000,qh:Math.round(dfZq.filter(r=>r._month===m&&(toStr(r._biz).includes('期货')||toStr(r._variety).includes('期货'))).reduce((s,r)=>s+r._amountYi,0)*10000)/10000}));
+  const trend=months.map(m=>({month:m,hg:Math.round(dfHg.filter(r=>r._month===m).reduce((s,r)=>s+r._amountYi,0)*10000)/10000,zq:Math.round(dfZq.filter(r=>r._month===m).reduce((s,r)=>s+r._amountYi,0)*10000)/10000,fund:Math.round(dfZq.filter(r=>r._month===m&&zqCategory(r)==='基金').reduce((s,r)=>s+r._amountYi,0)*10000)/10000,zqConv:Math.round(dfZq.filter(r=>r._month===m&&zqCategory(r)==='转债').reduce((s,r)=>s+r._amountYi,0)*10000)/10000,qh:Math.round(dfZq.filter(r=>r._month===m&&zqCategory(r)==='期货').reduce((s,r)=>s+r._amountYi,0)*10000)/10000}));
   return{trend,months};
 }
 
@@ -542,29 +542,29 @@ function detectAnomalies(dfAll,scaleMap){
 
 // ===== 规模分档月度快照（规模分布月筛 + 分档账户数折线；每月末时点按当月最新规模动态分档）=====
 const SIZE_BUCKETS=['<1亿','1-3亿','3-7亿','7-15亿','15-30亿','>30亿'];
-function buildSizeDistMonthly(dfPosClean){
-  const byCode=new Map();
+function buildSizeDistMonthly(dfPosClean,activeCodes){
+  // 只统计 交易账户∩规模表；当月快照只计当月有报告的账户（取当月最后一条），停报账户次月起退出
+  const byCodeMonth=new Map(); // code → month → 当月最后一条
+  const monthSet=new Set();
   for(const r of dfPosClean){
     const c=toStr(r._code);if(!c||!r._date||!(r._size>0))continue;
-    if(!byCode.has(c))byCode.set(c,[]);
-    byCode.get(c).push(r);
+    if(activeCodes&&!activeCodes.has(c))continue;
+    const m=getMonthKey(r._date);
+    monthSet.add(m);
+    const key=c+'|'+m;
+    const ex=byCodeMonth.get(key);
+    if(!ex||r._date>ex._date)byCodeMonth.set(key,r);
   }
-  for(const rows of byCode.values())rows.sort((a,b)=>a._date-b._date);
-  const monthSet=new Set();
-  for(const r of dfPosClean){if(r._date)monthSet.add(getMonthKey(r._date))}
   const months=Array.from(monthSet).sort();
   const byMonth={};
   for(const m of months){
-    const cutoff=new Date(m+'-01');cutoff.setMonth(cutoff.getMonth()+1); // 次月1日
     const snap={};
     for(const b of SIZE_BUCKETS)snap[b]={count:0,size:0};
-    for(const rows of byCode.values()){
-      let last=null;
-      for(const r of rows){if(r._date<cutoff)last=r;else break}
-      if(!last)continue;
-      const b=getSizeBucket(last._size);
+    for(const[key,r]of byCodeMonth){
+      if(!key.endsWith('|'+m))continue;
+      const b=getSizeBucket(r._size);
       if(!snap[b])continue;
-      snap[b].count++;snap[b].size+=last._size;
+      snap[b].count++;snap[b].size+=r._size;
     }
     for(const b of SIZE_BUCKETS)snap[b].size=Math.round(snap[b].size/1e8*100)/100;
     byMonth[m]=snap;
@@ -799,11 +799,12 @@ function buildConcentrationAnalysis(dfZq){
   return{varietyConc:varietyConc.slice(0,10),directionConc:directionConc.slice(0,10),termConc:termConc.slice(0,10)};
 }
 
-function buildLeverageAnalysis(dfPosClean,levRedAccounts){
+function buildLeverageAnalysis(dfPosClean,levRedAccounts,activeCodes){
   const byCode=new Map();
   for(const r of dfPosClean){
     const code=toStr(r._code);
     if(!code||!r._date)continue;
+    if(activeCodes&&!activeCodes.has(code))continue;
     if(!byCode.has(code))byCode.set(code,[]);
     byCode.get(code).push(r);
   }
@@ -831,6 +832,7 @@ function buildLeverageAnalysis(dfPosClean,levRedAccounts){
   const mktMap=new Map();
   for(const r of dfPosClean){
     if(!(r._size>0)||!(r._total>0)||!r._dateStr)continue;
+    if(activeCodes&&!activeCodes.has(toStr(r._code)))continue;
     if(!r._date||!isChinaWorkday(r._date))continue;
     if(r._lev==null||r._lev<=0||r._lev>2)continue;
     const ex=mktMap.get(r._dateStr)||{size:0,total:0};
@@ -838,7 +840,7 @@ function buildLeverageAnalysis(dfPosClean,levRedAccounts){
     mktMap.set(r._dateStr,ex);
   }
   const mkt=Array.from(mktMap.entries()).map(([d,v])=>({date:d,lev:Math.round(v.total/v.size*1000)/10})).sort((a,b)=>a.date<b.date?-1:1);
-  return{latest:latest.slice(0,15),dist,redAccounts:(levRedAccounts||[]).sort((a,b)=>b.maxLev-a.maxLev),dates,series,mkt};
+  return{latest:latest.slice(0,15),dist,redAccounts:(levRedAccounts||[]).filter(a=>!activeCodes||activeCodes.has(a.code)).sort((a,b)=>b.maxLev-a.maxLev),dates,series,mkt};
 }
 
 function buildValuationDeviation(dfZqClean){
@@ -1134,11 +1136,12 @@ function buildBondTypeComp(dfZqTrade){
 }
 
 // ===== 持仓健康度：净值最大回撤 / 规模持续缩水 / 净值涨跌排行 =====
-function buildPositionHealth(dfPosClean,statusByCode){
+function buildPositionHealth(dfPosClean,statusByCode,activeCodes){
   const byCode=new Map();
   for(const r of dfPosClean){
     const code=toStr(r._code);
     if(!code||!r._date)continue;
+    if(activeCodes&&!activeCodes.has(code))continue;
     if(!byCode.has(code))byCode.set(code,[]);
     byCode.get(code).push(r);
   }
@@ -1267,7 +1270,7 @@ function buildFifo(dfZqTrade,hdStart){
   accounts.sort((a,b)=>b.closed-a.closed||b.winRate-a.winRate); // 排名以闭合笔数为主
   const monthMap={};
   for(const[a,mm]of byAcctMonth){monthMap[a]=Object.fromEntries([...mm.entries()].map(([m,e])=>[m,{closed:e.closed,wins:e.wins,winRate:Math.round(e.wins/e.closed*1000)/10,avgHold:e.holdDen>0?Math.round(e.holdNum/e.holdDen):null}]))}
-  return{accounts,totalTrips:trips.length,openLots,map,retention,byMonth:monthMap};
+  return{accounts,totalTrips:trips.length,openLots,map,retention,byMonth:monthMap,trips};
 }
 
 // ===== 账户身份：固收+/纯债 + 配置/交易/混合 =====
@@ -1509,13 +1512,173 @@ function buildStyleScores(idMap,fifo,dfZqTrade,dfPosClean,dfAll){
   return{scores:out,bucketMean:Object.fromEntries(Object.entries(bucketMean).map(([b,m])=>[b,Math.round(m*100)/100])),overallMean:Math.round(overallMean*100)/100,monthlyTurnover};
 }
 
+// ===== 交易行为标签组（基础交易特征 + 行为标签；阈值集中可调）=====
+const BEH_CFG={
+  oneWay:0.8,        // 只买不卖/只卖不买：买或卖占双边比例
+  primary:0.4,       // 一级依赖：分销买入 ÷ 总买入
+  levPct:0.9,        // 高杠杆运行：同规模档分位（前 10%）
+  spikeAmp:0.3,      // 冲量幅度 ≥30%
+  spikeBase:1e8,     // 冲量门槛：月中基准 ≥1 亿
+  segShare:0.5,      // 频繁交易：主导段占比 >50%
+  segTrips:3         // 且段内闭合往返 >3 次
+};
+function buildBehaviorTags(dfZqTrade,dfZqClean,dfPosClean,fifo,activeCodes){
+  const tags={};
+  const add=(code,label,evidence)=>{(tags[code]=tags[code]||[]).push({label,evidence})};
+  const inScope=c=>!activeCodes||activeCodes.has(c);
+  // 代码 → 期限段×品种（利率/信用现券）
+  const codeSeg=new Map();
+  for(const r of dfZqTrade){
+    const bc=toStr(r['代码']);
+    const c=zqCategory(r);
+    if((c==='利率债'||c==='信用债')&&bc&&!codeSeg.has(bc)){
+      let b=r._termBucket||'0-1年';
+      if(b==='10-30年'||b==='30年+')b='10年+';
+      if(b==='基金')b=null;
+      if(b)codeSeg.set(bc,b+c);
+    }
+  }
+  const base={},dirSum=new Map(),primSum=new Map(),bondTot=new Map(),segAmt=new Map(),segTrips=new Map();
+  for(const r of dfZqTrade){
+    const a=toStr(r._code);if(!a||!inScope(a))continue;
+    const amt=r._amountYi;const c=zqCategory(r);
+    const e=base[a]||(base[a]={fund:0,bond:0,conv:0,alt:0});
+    if(c==='基金')e.fund+=amt;else if(c==='利率债'||c==='信用债')e.bond+=amt;else if(c==='转债')e.conv+=amt;else if(c==='ABS'||c==='REITs'||c==='期货')e.alt+=amt;
+    const d=toStr(r._dir);
+    const ds=dirSum.get(a)||{buy:0,sell:0};
+    if(['买入','分销买入','期货买入'].includes(d))ds.buy+=amt;else if(['卖出','分销卖出','期货卖出'].includes(d))ds.sell+=amt;
+    dirSum.set(a,ds);
+    if(toStr(r._variety)==='现券买卖'&&(c==='利率债'||c==='信用债')){
+      const seg=codeSeg.get(toStr(r['代码']));
+      if(seg){
+        bondTot.set(a,(bondTot.get(a)||0)+amt);
+        if(!segAmt.has(a))segAmt.set(a,new Map());
+        const m=segAmt.get(a);m.set(seg,(m.get(seg)||0)+amt);
+      }
+    }
+  }
+  for(const t of (fifo.trips||[])){
+    const seg=codeSeg.get(t.code);
+    if(!seg)continue;
+    if(!segTrips.has(t.acct))segTrips.set(t.acct,new Map());
+    const m=segTrips.get(t.acct);m.set(seg,(m.get(seg)||0)+1);
+  }
+  for(const r of dfZqClean){
+    const a=toStr(r._code);if(!a||!inScope(a))continue;
+    const d=toStr(r._dir);
+    if(d==='买入'||d==='分销买入'){
+      const e=primSum.get(a)||{fx:0,all:0};
+      e.all+=r._amountYi;if(d==='分销买入')e.fx+=r._amountYi;
+      primSum.set(a,e);
+    }
+  }
+  // 规模表驱动：冲量 + 高杠杆
+  const posByCode=new Map();
+  for(const r of dfPosClean){
+    const c=toStr(r._code);if(!c||!r._date||!(r._size>0)||!inScope(c))continue;
+    if(!posByCode.has(c))posByCode.set(c,[]);
+    posByCode.get(c).push(r);
+  }
+  for(const rows of posByCode.values())rows.sort((a,b)=>a._date-b._date);
+  const levArr=[];
+  for(const[code,rows]of posByCode){
+    const last=rows[rows.length-1];
+    if(last._lev!=null&&last._lev>0&&last._lev<=2)levArr.push({code,lev:last._lev,bucket:getSizeBucket(last._size)});
+  }
+  const bucketLevs={};
+  for(const x of levArr){(bucketLevs[x.bucket]=bucketLevs[x.bucket]||[]).push(x.lev)}
+  const allLevs=levArr.map(x=>x.lev).sort((a,b)=>a-b);
+  const pct90=arr=>arr.length?arr[Math.min(arr.length-1,Math.floor(arr.length*BEH_CFG.levPct))]:null;
+  const allP90=pct90(allLevs);
+  const bucketP90={};
+  for(const[b,arr]of Object.entries(bucketLevs)){arr.sort((x,y)=>x-y);bucketP90[b]=arr.length>=10?pct90(arr):allP90}
+  for(const x of levArr){
+    const th=bucketP90[x.bucket];
+    if(th!=null&&x.lev>=th)add(x.code,'高杠杆运行',`最新杠杆率 ${(x.lev*100).toFixed(0)}%，同规模档（${x.bucket}）前 10%`);
+  }
+  for(const[code,rows]of posByCode){
+    const byM=new Map();
+    for(const r of rows){
+      const m=getMonthKey(r._date);
+      if(!byM.has(m))byM.set(m,[]);
+      byM.get(m).push(r);
+    }
+    const months=Array.from(byM.keys()).sort();
+    const hits=[];
+    for(let i=0;i<months.length;i++){
+      const recs=byM.get(months[i]);
+      if(recs.length<10)continue; // 数据太少的月跳过（新开/关闭月）
+      const tail=recs.slice(-5),mid=recs.slice(0,-5);
+      if(mid.length<5)continue;
+      const baseAvg=mid.reduce((s,r)=>s+r._size,0)/mid.length;
+      if(baseAvg<BEH_CFG.spikeBase)continue;
+      const tailAvg=tail.reduce((s,r)=>s+r._size,0)/tail.length;
+      const amp=(tailAvg-baseAvg)/baseAvg;
+      if(amp<BEH_CFG.spikeAmp)continue;
+      if(i+1>=months.length)continue; // 最后一个数据月无法确认回落，跳过
+      const nxt=byM.get(months[i+1]);
+      if(nxt.length<12)continue;
+      const midNext=nxt.slice(7,12); // 次月第 8~12 个工作日
+      const nextAvg=midNext.reduce((s,r)=>s+r._size,0)/midNext.length;
+      if(nextAvg>baseAvg*1.1)continue;
+      hits.push({m:months[i],amp,tailAvg,baseAvg});
+    }
+    if(hits.length>0){
+      const isQuarter=hits.some(h=>['03','06','09','12'].includes(h.m.slice(5)));
+      const h=hits[hits.length-1];
+      add(code,isQuarter?'季末冲量':'月末冲量',`${h.m} 末5日规模 ${(h.tailAvg/1e8).toFixed(1)}亿 vs 月中 ${(h.baseAvg/1e8).toFixed(1)}亿（+${(h.amp*100).toFixed(0)}%），次月回落已确认；共 ${hits.length} 个月命中`);
+    }
+  }
+  // 方向 / 渠道标签
+  for(const[a,ds]of dirSum){
+    const tot=ds.buy+ds.sell;
+    if(tot<=0)continue;
+    if(ds.buy/tot>=BEH_CFG.oneWay)add(a,'只买不卖',`买入占双边 ${(ds.buy/tot*100).toFixed(0)}%`);
+    else if(ds.sell/tot>=BEH_CFG.oneWay)add(a,'只卖不买',`卖出占双边 ${(ds.sell/tot*100).toFixed(0)}%`);
+  }
+  for(const[a,e]of primSum){
+    if(e.all>0&&e.fx/e.all>=BEH_CFG.primary)add(a,'一级依赖',`分销买入占总买入 ${(e.fx/e.all*100).toFixed(0)}%`);
+  }
+  // 基础交易特征（长债型并入债券型）+ 频繁交易深挖（仅债券型）
+  const baseTag={};
+  for(const[a,e]of Object.entries(base)){
+    const cats={'基金型':e.fund,'债券型':e.bond,'转债型':e.conv,'另类型':e.alt};
+    const tot=Object.values(cats).reduce((s,x)=>s+x,0);
+    let tag='综合型';
+    if(tot>0){
+      const[bestTag,bestVal]=Object.entries(cats).sort((x,y)=>y[1]-x[1])[0];
+      if(bestVal/tot>0.4)tag=bestTag;
+    }
+    baseTag[a]=tag;
+    if(tag==='债券型'){
+      const tot2=bondTot.get(a)||0;
+      if(tot2>0&&segAmt.has(a)){
+        const segs=[...segAmt.get(a).entries()].sort((x,y)=>y[1]-x[1]);
+        const[seg,amt]=segs[0];
+        const share=amt/tot2;
+        const trips=(segTrips.get(a)&&segTrips.get(a).get(seg))||0;
+        if(share>BEH_CFG.segShare&&trips>BEH_CFG.segTrips){
+          add(a,`频繁交易${seg}`,`占其债券交易 ${(share*100).toFixed(0)}%（${amt.toFixed(1)}亿），闭合往返 ${trips} 次`);
+        }
+      }
+    }
+  }
+  return{base:baseTag,tags};
+}
+function behBadge(t){
+  const cls=t.label.includes('冲量')?'badge-amber':t.label.includes('杠杆')?'badge-red':t.label.includes('频繁交易')?'badge-blue':'badge-gray';
+  return`<span class="badge ${cls}" title="${t.evidence}">${t.label}</span>`;
+}
+
 // ===== 持仓分析（期末横截面，描述性）=====
-function buildHoldingsAnalysis(hdEnd){
+function buildHoldingsAnalysis(hdEnd,activeCodes){
+  const inScope=a=>!activeCodes||activeCodes.has(a);
   const acctMap=new Map();
   const get=a=>{if(!acctMap.has(a))acctMap.set(a,{code:a,name:'',bondMV:0,fundMV:0,floatPnl:0,realPnl:0,face:0});return acctMap.get(a)};
   const comp={}; // 类别市值
   const add=(cat,mv)=>{comp[cat]=Math.round(((comp[cat]||0)+mv)*100)/100};
   for(const b of hdEnd.bonds){
+    if(!inScope(b.acct))continue;
     const a=get(b.acct);
     if(!a.name)a.name=b.acct;
     a.bondMV+=b.mv;a.face+=b.face;a.floatPnl+=b.floatPnl;a.realPnl+=b.realPnl;
@@ -1528,6 +1691,7 @@ function buildHoldingsAnalysis(hdEnd){
     add(cat,b.mv);
   }
   for(const f of hdEnd.funds){
+    if(!inScope(f.acct))continue;
     const a=get(f.acct);
     a.fundMV+=f.mv;a.floatPnl+=f.floatPnl;a.realPnl+=f.realPnl;
     const cat=f.kind==='REITs'?'REITs':(f.kind.includes('ETF')||f.kind.includes('基金')?'基金':'其他');
@@ -1543,8 +1707,8 @@ function buildHoldingsAnalysis(hdEnd){
     compData,
     gainers:byPnl.filter(a=>a.floatPnl>0).slice(0,10).map(a=>({code:a.code,name:a.name,pnl:Math.round(a.floatPnl/1e4*100)/100})),
     losers:byPnl.filter(a=>a.floatPnl<0).sort((a,b)=>a.floatPnl-b.floatPnl).slice(0,10).map(a=>({code:a.code,name:a.name,pnl:Math.round(a.floatPnl/1e4*100)/100})),
-    futures:hdEnd.futures.filter(f=>f.qty!==0||f.margin!==0),
-    funds:hdEnd.funds.filter(f=>f.mv!==0).sort((a,b)=>Math.abs(b.mv)-Math.abs(a.mv)).slice(0,50),
+    futures:hdEnd.futures.filter(f=>inScope(f.acct)&&(f.qty!==0||f.margin!==0)),
+    funds:hdEnd.funds.filter(f=>inScope(f.acct)&&f.mv!==0).sort((a,b)=>Math.abs(b.mv)-Math.abs(a.mv)).slice(0,50),
     hasData:hdEnd.bonds.length>0||hdEnd.funds.length>0
   };
 }
@@ -1611,12 +1775,14 @@ function profileRows(month){
     if(a){a.size=Math.round(p._size/1e8*100)/100;if(!a.name)a.name=toStr(p._nameSAC)}
   }
   for(const a of accts.values()){
-    const cats={'基金型':a.fund,'长债型':a.xyLong+a.llLong,'债券型':a.xyShort+a.llShort,'转债型':a.conv,'另类型':a.abs+a.reit+a.qh};
+    const cats={'基金型':a.fund,'债券型':a.xyLong+a.xyShort+a.llLong+a.llShort,'转债型':a.conv,'另类型':a.abs+a.reit+a.qh}; // 长债型并入债券型
     const total=Object.values(cats).reduce((s,x)=>s+x,0);
     if(total>0){
       const[bestTag,bestVal]=Object.entries(cats).sort((x,y)=>y[1]-x[1])[0];
       if(bestVal/total>0.4)a.tag=bestTag;
     }
+    if(month==='all'&&r.behaviorTags&&r.behaviorTags.base[a.code])a.tag=r.behaviorTags.base[a.code];
+    a.behTags=(r.behaviorTags&&r.behaviorTags.tags[a.code])||[];
     a.tradeTotal=total+a.xyhg+a.zyhg;
     a.primaryPct=a.buyAll>0?Math.round(a.fxBuy/a.buyAll*1000)/10:null;
     // 身份（固收+/纯债、风格）与评价指标（胜率/月均换手率/平均持有：全区间用汇总值，选月用当月值）
@@ -1648,7 +1814,7 @@ function profileRows(month){
   }
   return out;
 }
-const PROFILE_COLS=[['code','账户代码'],['name','账户名称'],['size','持仓规模(亿)'],['tag','主营标签'],['type','类型'],['style','风格'],['winRate','胜率%(笔数)'],['endMV','期末市值(亿)'],['allocRate','资产配置率%'],['turnoverX','月均换手率'],['avgHold','平均持有(天)'],['primaryPct','一级占比%'],['fund','基金'],['xyLong','信用债-长久期'],['xyShort','信用债-非长久期'],['llLong','利率债-长久期'],['llShort','利率债-非长久期'],['conv','转债'],['abs','ABS'],['reit','REITs'],['qh','国债期货'],['xyhg','协议回购'],['zyhg','质押式回购']];
+const PROFILE_COLS=[['code','账户代码'],['name','账户名称'],['size','持仓规模(亿)'],['tag','交易特征'],['type','类型'],['style','风格'],['winRate','胜率%(笔数)'],['endMV','期末市值(亿)'],['allocRate','资产配置率%'],['turnoverX','月均换手率'],['avgHold','平均持有(天)'],['primaryPct','一级占比%'],['fund','基金'],['xyLong','信用债-长久期'],['xyShort','信用债-非长久期'],['llLong','利率债-长久期'],['llShort','利率债-非长久期'],['conv','转债'],['abs','ABS'],['reit','REITs'],['qh','国债期货'],['xyhg','协议回购'],['zyhg','质押式回购']];
 function tagBadge(tag){
   const cls={'另类型':'badge-amber','综合型':'badge-gray','基金型':'badge-blue','转债型':'badge-blue','长债型':'badge-green','债券型':'badge-green'}[tag]||'badge-gray';
   return`<span class="badge ${cls}">${tag}</span>`;
@@ -1668,7 +1834,7 @@ function profileTableHtml(){
   const headers=PROFILE_COLS.map(([key,label],i)=>`<span class="th-sort" onclick="sortProfile(${i})">${label}${profileState.sortCol===i?(profileState.sortAsc?' ↑':' ↓'):''}</span>`);
   const yi=v=>v>0?Math.round(v*100)/100:'-';
   const tableRows=rows.map(a=>{
-    const row=[`<span class="font-mono">${a.code}</span>`,a.name,a.size!=null?a.size:'-',tagBadge(a.tag),typeBadge(a.type),styleBadge(a.style),
+    const row=[`<span class="font-mono">${a.code}</span>`,a.name,a.size!=null?a.size:'-',tagBadge(a.tag)+(a.behTags||[]).slice(0,2).map(behBadge).join(''),typeBadge(a.type),styleBadge(a.style),
       a.winRate!=null?`${a.winRate}%（${a.closedTrips}笔）`:'-',yi(a.endMV),a.allocRate!=null?a.allocRate:'-',a.turnoverX!=null?a.turnoverX:'-',a.avgHold!=null?a.avgHold:'-',a.primaryPct!=null?a.primaryPct:'-',
       yi(a.fund),yi(a.xyLong),yi(a.xyShort),yi(a.llLong),yi(a.llShort),yi(a.conv),yi(a.abs),yi(a.reit),yi(a.qh),yi(a.xyhg),yi(a.zyhg)];
     row._code=a.code;
@@ -1752,15 +1918,15 @@ function runAnalysis(rawHg,rawZq,rawPos,hdStart,hdEnd,salesDropped){
   const monthlyTrend=buildMonthlyTrend(dfHgClean,dfZqTrade);
   const termStructure=buildTermStructure(dfZqTrade);
   const anomalies=detectAnomalies(dfAll,dq.scaleMap);
-  const lowActivity=buildLowActivity(dfAll);
+  const lowActivity=buildLowActivity(dfAllTrade); // 只认实质交易（回购+交易量口径），转托管/借贷/质押券调整等运维记录不算
   const posOverview=buildPositionOverview(dfPosFilled,activeCodesSet);
   const posTimeSeries=buildPositionTimeSeries(dfPosFilled,activeCodesSet);
   const lifecycle=buildLifecycle(dfPosClean,dfAllTrade);
-  const posHealth=buildPositionHealth(dfPosClean,lifecycle?lifecycle.statusByCode:null);
+  const posHealth=buildPositionHealth(dfPosClean,lifecycle?lifecycle.statusByCode:null,activeCodesSet);
   const sizeCategory=buildSizeCategoryAnalysis(dfZqTrade,dfPosFilled,activeCodesSet);
   const turnoverAnalysis=buildTurnoverAnalysis(dfZqTrade,dfPosFilled,activeCodesSet);
   const concentration=buildConcentrationAnalysis(dfZqTrade);
-  const leverage=buildLeverageAnalysis(dfPosClean,dq.levRedAccounts);
+  const leverage=buildLeverageAnalysis(dfPosClean,dq.levRedAccounts,activeCodesSet);
   const valuation=buildValuationDeviation(dfZqClean);
   // 部门映射：内部证券账户代码 → 持仓规模.账户归属（取该账户最新一条记录的归属）
   const deptByCode=new Map();
@@ -1787,13 +1953,13 @@ function runAnalysis(rawHg,rawZq,rawPos,hdStart,hdEnd,salesDropped){
   for(const a of noPosAccounts)a.amount=Math.round(a.amount*100)/100;
   const netBuy=buildNetBuy(dfZqTrade);
   const varietyComp=buildVarietyComp(dfHgClean,dfZqTrade);
-  const monthlyActive=buildMonthlyActiveAccounts(dfAll);
+  const monthlyActive=buildMonthlyActiveAccounts(dfAllTrade); // 同上：只认实质交易
   const hotItems=buildHotItems(dfZqTrade);
   const bondTypeComp=buildBondTypeComp(dfZqTrade);
   // 持仓明细驱动的新分析
   const fifo=buildFifo(dfZqTrade,hdStart);
   const identity=buildAccountIdentity(dfZqTrade,hdStart,hdEnd,fifo,dfPosClean,activeCodesSet);
-  const sizeDistMonthly=buildSizeDistMonthly(dfPosClean);
+  const sizeDistMonthly=buildSizeDistMonthly(dfPosClean,activeCodesSet);
   // R10 提醒：资产配置率（期末市值÷最新规模）>200%
   {
     const latestSz=new Map();
@@ -1812,13 +1978,14 @@ function runAnalysis(rawHg,rawZq,rawPos,hdStart,hdEnd,salesDropped){
   // 多维打分（六信号+闭合门槛）；同时把画像用的换手率回写为月均口径
   const styleResult=buildStyleScores(identity.idMap,fifo,dfZqTrade,dfPosClean,dfAll);
   const styleScores=styleResult.scores;
+  const behaviorTags=buildBehaviorTags(dfZqTrade,dfZqClean,dfPosClean,fifo,activeCodesSet);
   for(const code of Object.keys(identity.idMap)){
     const s=styleScores[code];
     if(s&&s.style){identity.idMap[code].style=s.style;identity.idMap[code].styleScore=s.score}
     else if(s){identity.idMap[code].style=null;identity.idMap[code].styleScore=null}
     if(s&&s.raw&&s.raw.turnover!=null)identity.idMap[code].turnover=s.raw.turnover;
   }
-  const holdingsAnalysis=buildHoldingsAnalysis(hdEnd);
+  const holdingsAnalysis=buildHoldingsAnalysis(hdEnd,activeCodesSet);
 
   const totalHg=dfHgClean.length;
   const totalZq=dfZqTrade.length;
@@ -1830,7 +1997,7 @@ function runAnalysis(rawHg,rawZq,rawPos,hdStart,hdEnd,salesDropped){
   const summary={totalHg,totalZq,totalAccounts,totalAmount,hgAmount,zqAmount,dqFiltered,hasPosition:dfPosClean.length>0&&posOverview.hasData};
 
   return{
-    summary,hgTop10,bondTop10,xyhgTop10,longTermTop10,fundTop10,zqTop10,qhTop10,absTop10,reitTop10,traderAnalysis,styleScores,styleMeta:{bucketMean:styleResult.bucketMean,overallMean:styleResult.overallMean,monthlyTurnover:styleResult.monthlyTurnover},noPosAccounts,sizeDistMonthly,
+    summary,hgTop10,bondTop10,xyhgTop10,longTermTop10,fundTop10,zqTop10,qhTop10,absTop10,reitTop10,traderAnalysis,styleScores,styleMeta:{bucketMean:styleResult.bucketMean,overallMean:styleResult.overallMean,monthlyTurnover:styleResult.monthlyTurnover},noPosAccounts,sizeDistMonthly,behaviorTags,
     deepByCat,monthlyTrend,termStructure,anomalies,lowActivity,
     posOverview,posTimeSeries,posHealth,sizeCategory,posMissingReport,
     turnoverAnalysis,concentration,repoAnalysis,deptSummary,netBuy,
@@ -2013,7 +2180,7 @@ function renderBehaviorTab(r){
   for(const x of r._store.hg){if(x._month)monthSet.add(x._month)}
   const months=Array.from(monthSet).sort();
   let html=`<div class="card"><div class="card-header"><div class="card-title">账户画像总表</div></div><div class="card-body">
-    <p style="color:#64748b;font-size:13px;margin-bottom:12px">五大类：基金 / 信用债 / 利率债 / 转债 / 另类（ABS+REITs+国债期货，分列展示合并判定）；信用债与利率债按 ≥10 年区分长久期。主营标签 = 占比最高且 &gt;40% 的类别（占比分母不含回购）；一级占比 = 分销买入 ÷ 总买入（一级市场参与度）；点击列头排序，点击行查看完整画像</p>
+    <p style="color:#64748b;font-size:13px;margin-bottom:12px">交易特征 = 品种金额占比最高且 &gt;40% 的类别（基金型/债券型/转债型/另类型，分母不含回购，其余为综合型）；债券型账户若某一「剩余期限×品种」段占其债券交易 &gt;50% 且段内闭合往返 &gt;3 次，追加「频繁交易+段名」标签。行为标签（月末/季末冲量、只买不卖、只卖不买、一级依赖、高杠杆运行）悬停显示证据数值。一级占比 = 分销买入 ÷ 总买入；胜率/月均换手率/平均持有/持仓规模随月份筛选联动；点击列头排序，点击行查看完整画像</p>
     <div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
       <select id="profileMonth" onchange="profileState.month=this.value;profileState.sortCol=null;refreshProfileTable()" style="padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
         <option value="all">全区间汇总</option>${months.map(m=>`<option value="${m}">${m}</option>`).join('')}
@@ -2301,9 +2468,11 @@ function buildAccountProfileHtml(code){
   const netDur=buyTerm-sellTerm;
   const durText=Math.abs(netDur)<0.5?'久期基本中性':(netDur>0?`拉久期 +${netDur.toFixed(1)}`:`缩久期 ${netDur.toFixed(1)}`);
   const netText=Array.from(catNet.entries()).filter(([,v])=>Math.abs(v)>=0.5).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).map(([c,v])=>`${c} ${v>0?'+':''}${v.toFixed(1)}亿`).join('、');
+  const behTags=(r.behaviorTags&&r.behaviorTags.tags[code])||[];
   const sid='pf'+(++buildAccountProfileHtml.seq);
   buildAccountProfileHtml.lastSid=sid;
   return`<div class="account-detail" style="margin-top:12px"><div class="detail-header"><span class="font-mono">${code}</span> ${name} ${tag?tagBadge(tag):''} ${id&&id.type?typeBadge(id.type):''} ${id&&id.style?styleBadge(id.style):''}</div>
+    ${behTags.length>0?`<div class="detail-row" style="flex-wrap:wrap;gap:6px;margin-top:6px">${behTags.map(behBadge).join(' ')}</div>`:''}
     <div class="detail-row">
       <span>归属: ${belong}</span>
       <span>生命周期: <strong>${status}</strong></span>
@@ -2578,12 +2747,6 @@ function initCharts(result){
     chart.setOption({tooltip:{trigger:'axis'},legend:{data:['回购','债券','基金','转债','期货']},grid:{left:'3%',right:'4%',bottom:'3%',containLabel:true},xAxis:{type:'category',data:result.monthlyTrend.months},yAxis:{type:'value',name:'亿元'},series:[{name:'回购',type:'line',data:result.monthlyTrend.trend.map(t=>t.hg),smooth:true},{name:'债券',type:'line',data:result.monthlyTrend.trend.map(t=>t.zq),smooth:true},{name:'基金',type:'line',data:result.monthlyTrend.trend.map(t=>t.fund),smooth:true},{name:'转债',type:'line',data:result.monthlyTrend.trend.map(t=>t.zqConv),smooth:true},{name:'期货',type:'line',data:result.monthlyTrend.trend.map(t=>t.qh),smooth:true}]});
     chartInstances['trend']=chart;
   }
-  const termEl=document.getElementById('chart-term');
-  if(termEl){
-    const chart=echarts.init(termEl);
-    chart.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},legend:{data:['买入','卖出']},grid:{left:'3%',right:'4%',bottom:'3%',containLabel:true},xAxis:{type:'category',data:result.termStructure.map(t=>t.bucket)},yAxis:{type:'value',name:'亿元'},series:[{name:'买入',type:'bar',data:result.termStructure.map(t=>t.buy)},{name:'卖出',type:'bar',data:result.termStructure.map(t=>t.sell)}]});
-    chartInstances['term']=chart;
-  }
   const termPieEl=document.getElementById('chart-term-pie');
   if(termPieEl){/* 期限饼图已移除，保留判断防止报错 */}
   const netbuyEl=document.getElementById('chart-netbuy');
@@ -2608,13 +2771,6 @@ function initCharts(result){
       tsChart.setOption({tooltip:{trigger:'axis'},legend:{data:sdm.buckets,type:'scroll'},grid:{left:'3%',right:'4%',bottom:'3%',containLabel:true},xAxis:{type:'category',data:sdm.months},yAxis:{type:'value',name:'账户数',minInterval:1},series:sdm.buckets.map((b,i)=>({name:b,type:'line',data:sdm.months.map(m=>sdm.byMonth[m][b].count),smooth:true,connectNulls:true,color:colors[i%colors.length]}))});
       chartInstances['sizeTs']=tsChart;
     }
-  }
-  const posTsEl=document.getElementById('chart-pos-ts');
-  if(posTsEl&&result.posTimeSeries.series.length>0){
-    const chart=echarts.init(posTsEl);
-    const colors=['#3b82f6','#ef4444','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316'];
-    chart.setOption({tooltip:{trigger:'axis'},legend:{data:result.posTimeSeries.series.map(s=>s.name),type:'scroll'},grid:{left:'3%',right:'4%',bottom:'15%',containLabel:true},xAxis:{type:'category',data:result.posTimeSeries.dates},yAxis:{type:'value',name:'规模(亿元)'},series:result.posTimeSeries.series.map((s,i)=>({name:s.name,type:'line',data:result.posTimeSeries.dates.map(d=>{const found=s.data.find(x=>x.date===d);return found?{value:found.size,symbol:found._filled?'emptyCircle':'circle',itemStyle:{opacity:found._filled?0.4:1}}:null}),smooth:true,color:colors[i%colors.length],lineStyle:{type:'solid'}}))});
-    chartInstances['posTs']=chart;
   }
   const levTsEl=document.getElementById('chart-lev-ts');
   if(levTsEl&&result.leverage&&result.leverage.series.length>0){
