@@ -44,6 +44,8 @@ tr:hover{background:#f8fafc}
 .text-right{text-align:right}
 .font-mono{font-family:"SF Mono",Monaco,"Cascadia Code",monospace;font-size:12px}
 .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:500}
+.tag-chip{cursor:pointer;user-select:none;opacity:.45;margin:2px 2px}
+.tag-chip.on{opacity:1;box-shadow:0 0 0 1.5px currentColor inset}
 .badge-blue{background:#dbeafe;color:#1d4ed8}
 .badge-green{background:#dcfce7;color:#166534}
 .badge-amber{background:#fef3c7;color:#92400e}
@@ -1714,7 +1716,7 @@ function buildHoldingsAnalysis(hdEnd,activeCodes){
 }
 
 // ===== 账户画像总表数据层（五大类+回购拆分+主营标签）=====
-const profileState={month:'all',sortCol:null,sortAsc:false};
+const profileState={month:'all',sortCol:null,sortAsc:false,tagFilter:new Set()};
 function profileRows(month){
   const r=currentResult;
   if(!r||!r._store)return[];
@@ -1807,7 +1809,22 @@ function profileRows(month){
     // 资产配置率 = 期末市值 ÷ 持仓规模（分母随月份联动）
     a.allocRate=a.endMV>0&&a.size!=null&&a.size>0?Math.round(a.endMV/a.size*1000)/10:null;
   }
-  const out=Array.from(accts.values());
+  let out=Array.from(accts.values());
+  // 标签筛选：同组内 OR，跨组 AND
+  if(profileState.tagFilter.size>0){
+    const groups={feat:new Set(),type:new Set(),style:new Set(),beh:new Set()};
+    for(const k of profileState.tagFilter){const[g,v]=k.split('::');if(groups[g])groups[g].add(v)}
+    out=out.filter(a=>{
+      if(groups.feat.size&&!groups.feat.has(a.tag))return false;
+      if(groups.type.size&&!groups.type.has(a.type))return false;
+      if(groups.style.size&&!groups.style.has(a.style))return false;
+      if(groups.beh.size){
+        const labels=(a.behTags||[]).map(t=>t.label);
+        if(![...groups.beh].some(l=>labels.includes(l)))return false;
+      }
+      return true;
+    });
+  }
   if(month==='all'){
     profileState.tagMap=new Map(out.map(a=>[a.code,a.tag]));
     profileState.nameMap=new Map(out.map(a=>[a.code,a.name]));
@@ -1847,9 +1864,26 @@ function sortProfile(i){
   else{profileState.sortCol=i;profileState.sortAsc=false}
   refreshProfileTable();
 }
+function toggleTagFilter(el){
+  const key=el.dataset.key;
+  if(profileState.tagFilter.has(key))profileState.tagFilter.delete(key);
+  else profileState.tagFilter.add(key);
+  el.classList.toggle('on');
+  refreshProfileTable();
+}
+function clearTagFilter(){
+  profileState.tagFilter.clear();
+  document.querySelectorAll('.tag-chip.on').forEach(c=>c.classList.remove('on'));
+  refreshProfileTable();
+}
+function updateTagFilterCount(n){
+  const el=document.getElementById('tagFilterCount');
+  if(el)el.textContent=profileState.tagFilter.size>0?`命中 ${n} 户`:'未筛选';
+}
 function refreshProfileTable(){
   const el=document.getElementById('profileTableWrap');
   if(el)el.innerHTML=profileTableHtml();
+  updateTagFilterCount(profileRows(profileState.month).length);
 }
 
 
@@ -2181,6 +2215,20 @@ function renderBehaviorTab(r){
   const months=Array.from(monthSet).sort();
   let html=`<div class="card"><div class="card-header"><div class="card-title">账户画像总表</div></div><div class="card-body">
     <p style="color:#64748b;font-size:13px;margin-bottom:12px">交易特征 = 品种金额占比最高且 &gt;40% 的类别（基金型/债券型/转债型/另类型，分母不含回购，其余为综合型）；债券型账户若某一「剩余期限×品种」段占其债券交易 &gt;50% 且段内闭合往返 &gt;3 次，追加「频繁交易+段名」标签。行为标签（月末/季末冲量、只买不卖、只卖不买、一级依赖、高杠杆运行）悬停显示证据数值。一级占比 = 分销买入 ÷ 总买入；胜率/月均换手率/平均持有/持仓规模随月份筛选联动；点击列头排序，点击行查看完整画像</p>
+    <div style="margin-bottom:12px;padding:10px 12px;background:#f8fafc;border-radius:8px">
+      <div style="font-size:12px;color:#64748b;margin-bottom:6px">标签筛选（同组多选=或，跨组=且；<span id="tagFilterCount">未筛选</span>）</div>
+      ${(()=>{
+        const behLabels=new Set();
+        if(r.behaviorTags)for(const c of Object.keys(r.behaviorTags.tags))for(const t of r.behaviorTags.tags[c])behLabels.add(t.label);
+        const chip=(g,v)=>`<span class="badge badge-gray tag-chip" data-key="${g}::${v}" onclick="toggleTagFilter(this)">${v}</span>`;
+        const grp=(name,items)=>items.length?`<div style="margin-bottom:4px"><span style="font-size:12px;color:#94a3b8;margin-right:6px">${name}</span>${items.join('')}</div>`:'';
+        return grp('交易特征',['基金型','债券型','转债型','另类型','综合型'].map(x=>chip('feat',x)))
+          +grp('类型',['固收+','纯债'].map(x=>chip('type',x)))
+          +grp('风格',['交易型','混合型','配置型'].map(x=>chip('style',x)))
+          +grp('行为标签',Array.from(behLabels).sort().map(x=>chip('beh',x)));
+      })()}
+      <div style="margin-top:4px"><a href="javascript:void(0)" onclick="clearTagFilter()" style="font-size:12px;color:#1d4ed8">清除筛选</a></div>
+    </div>
     <div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
       <select id="profileMonth" onchange="profileState.month=this.value;profileState.sortCol=null;refreshProfileTable()" style="padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
         <option value="all">全区间汇总</option>${months.map(m=>`<option value="${m}">${m}</option>`).join('')}
@@ -2475,8 +2523,8 @@ function buildAccountProfileHtml(code){
     ${behTags.length>0?`<div class="detail-row" style="flex-wrap:wrap;gap:6px;margin-top:6px">${behTags.map(behBadge).join(' ')}</div>`:''}
     <div class="detail-row">
       <span>归属: ${belong}</span>
-      <span>生命周期: <strong>${status}</strong></span>
-      ${last?`<span>最新规模: ${(last._size/1e8).toFixed(2)}亿</span><span>杠杆率: ${last._lev!=null?(last._lev*100).toFixed(1)+'%':'-'}</span><span>净值: ${last._nav!=null?last._nav.toFixed(4):'-'}</span>`:'<span>无持仓数据</span>'}
+      <span>账户状态: <strong>${status}</strong></span>
+      ${last?`<span>最新规模: ${(last._size/1e8).toFixed(2)}亿</span><span>资产配置率: ${id&&id.endMV>0&&last._size>0?(id.endMV/(last._size/1e8)*100).toFixed(0)+'%':'-'}</span><span>杠杆率: ${last._lev!=null?(last._lev*100).toFixed(1)+'%':'-'}</span><span>净值: ${last._nav!=null?last._nav.toFixed(4):'-'}</span>`:'<span>无持仓数据</span>'}
     </div></div>
     <div class="grid-2" style="margin-top:12px">
       <div class="account-detail"><div class="detail-header">回购业务</div><div class="detail-row"><span>${hg.length.toLocaleString()} 笔 / ${hgAmt.toFixed(2)}亿</span><span>正回购 ${hgPos.toFixed(2)}亿</span><span>逆回购 ${hgNeg.toFixed(2)}亿</span></div></div>
