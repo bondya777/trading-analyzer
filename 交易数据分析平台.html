@@ -2268,8 +2268,8 @@ function renderOverviewTab(r,dept,sub){
   html+=`<div class="card"><div class="card-header"><div class="card-title">月度交易趋势</div></div><div class="card-body"><div id="chart-trend" class="chart-large"></div></div></div>
     <div class="card"><div class="card-header"><div class="card-title">月度净买入方向（买入 − 卖出，亿元）</div></div><div class="card-body"><div id="chart-netbuy" class="chart-large"></div></div></div>
     <div class="grid-2">
-      <div class="card"><div class="card-header"><div class="card-title">债券业务品种构成（金额占比，不含回购）</div><div class="card-body"><div id="chart-variety-comp" class="chart"></div></div></div>
-      <div class="card"><div class="card-header"><div class="card-title">月度活跃账户分档（除回购外，当月笔数分档计账户数）</div><div class="card-body"><div id="chart-active-accounts" class="chart"></div></div></div>
+      <div class="card"><div class="card-header"><div class="card-title">债券业务品种构成（金额占比，不含回购）</div></div><div class="card-body"><div id="chart-variety-comp" class="chart"></div></div></div>
+      <div class="card"><div class="card-header"><div class="card-title">月度活跃账户分档（除回购外，当月笔数分档计账户数）</div></div><div class="card-body"><div id="chart-active-accounts" class="chart"></div></div></div>
     </div>
     <div class="section-title">热门标的 Top5（交易额最大）</div>
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:20px">`;
@@ -3054,14 +3054,16 @@ document.getElementById('startBtn').addEventListener('click',async()=>{
         setLoading(`正在解析交易流水 ${i+1}/${pendingFiles.flow.length}（${pendingFiles.flow[i].name}）…`);
         await tick();
         const f=parseFlowWb(await readWb(pendingFiles.flow[i]));
-        mergeHg.push(...f.hgRaw);mergeZq.push(...f.zqRaw);
-        if(f.posRaw.length)mergePos.push(...f.posRaw);
+        for(const x of f.hgRaw)mergeHg.push(x); // 不用展开运算符：大数组 push(...) 会栈溢出
+        for(const x of f.zqRaw)mergeZq.push(x);
+        if(f.posRaw.length)for(const x of f.posRaw)mergePos.push(x);
         salesDropped+=f.salesDropped;
       }
       if(i<pendingFiles.pos.length){
         setLoading(`正在解析持仓规模 ${i+1}/${pendingFiles.pos.length}…`);
         await tick();
-        mergePos.push(...parsePosWb(await readWb(pendingFiles.pos[i])));
+        const posPart=parsePosWb(await readWb(pendingFiles.pos[i]));
+        for(const x of posPart)mergePos.push(x);
       }
     }
     if(!mergeHg.length&&!mergeZq.length)throw new Error('交易流水文件解析为空，请确认文件格式');
