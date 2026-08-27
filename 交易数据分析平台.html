@@ -411,17 +411,23 @@ function buildAcctDim(acctInfo){
 }
 function fmtDateOrNull(v){const d=parseDate(v);return d?fmtDate(d):''}
 
-// ===== 批次2：投资经理分析 =====
-// 雷达 7 维：管理账户数/管理规模/贡献收入/策略丰富度/客群丰富度/交易频率/今年以来收益率
+// ===== 投资经理分析 =====
+// 雷达 7 维：管理账户数/管理规模/贡献收入/策略丰富度/客群丰富度/今年以来平均收益率/月均换手率（收益率排在换手率上方）
+// 账户池口径：账户策略及业绩表（截面存续账户，含不在流水/持仓的账户）；该表为空或无数据时回退 IAM 维表
 // 分位口径：部门内小于他的人数÷(部门人数−1)×100；部门<5 人切全体分位并注明
-const MGR_DIMS=[{key:'acctCount',label:'管理账户数',unit:'个'},{key:'scale',label:'管理规模',unit:'亿'},{key:'income',label:'贡献收入',unit:'万'},{key:'stratRich',label:'策略丰富度',unit:'类'},{key:'clientRich',label:'客群丰富度',unit:'类'},{key:'tradeFreq',label:'交易频率',unit:'笔/月·户均'},{key:'retYtd',label:'今年以来收益率',unit:'%'}];
-function buildManagerAnalysis(acctDim,activeCodes,dfPosClean,dfZqTrade,fifo,ddMap,newAcctSet){
+const MGR_DIMS=[{key:'acctCount',label:'管理账户数',unit:'个'},{key:'scale',label:'管理规模',unit:'亿'},{key:'income',label:'贡献收入',unit:'万'},{key:'stratRich',label:'策略丰富度',unit:'类'},{key:'clientRich',label:'客群丰富度',unit:'类'},{key:'retYtd',label:'今年以来平均收益率',unit:'%'},{key:'turnover',label:'月均换手率',unit:'倍'}];
+const MGR_TENURE_MIN_DAYS=92; // 收益率统计剔除：观察时点距开始运作不足约 3 个月的账户
+function buildManagerAnalysis(acctDim,activeCodes,dfPosClean,dfZqTrade,fifo,ddMap,newAcctSet,idMap){
   const dim=acctDim.dim,strat=acctDim.strat,feeByCode=acctDim.feeByCode;
+  // 账户池：策略表非空则用策略表口径（截面存续账户，含不在流水/持仓中的账户），否则回退 IAM 维表
+  const stratCodes=Object.keys(strat);
+  const universe=new Set(stratCodes.length>0?stratCodes:Object.keys(dim));
+  const universeSrc=stratCodes.length>0?'账户策略及业绩表':'IAM维表（策略表为空，回退）';
   // 共管账户收入按 1/N 分摊（N=该账户经理数）；收入口径=全部交易状态
   const shareOf=c=>{const d=dim[c];const n=d&&d.managers&&d.managers.length?d.managers.length:1;return 1/n};
   const sharedFeeByCode={};
   for(const c of Object.keys(feeByCode))sharedFeeByCode[c]=feeByCode[c]*shareOf(c);
-  // 贡献收入按月明细（分摊后），供经理页时间区间筛选
+  // 贡献收入按月明细（分摊后），供经理页时间区间筛选与故事页引用
   const feeByCodeMonth={};const feeMonthSet=new Set();
   for(const fr of acctDim.feeRows||[]){
     if(!fr.code||!fr.month)continue;
@@ -429,45 +435,23 @@ function buildManagerAnalysis(acctDim,activeCodes,dfPosClean,dfZqTrade,fifo,ddMa
     if(!feeByCodeMonth[fr.code])feeByCodeMonth[fr.code]={};
     feeByCodeMonth[fr.code][fr.month]=(feeByCodeMonth[fr.code][fr.month]||0)+fr.amount*shareOf(fr.code);
   }
-  // 账户级辅助：最新规模 / 全期日均规模 / 月均笔数
-  const latestSize=new Map();const avgSize=new Map();
-  {
-    const agg=new Map();
-    for(const r of dfPosClean){
-      const c=toStr(r._code);if(!c||!r._date||!(r._size>0))continue;
-      const ex=latestSize.get(c);if(!ex||r._date>ex)latestSize.set(c,r._date);
-      const e=agg.get(c)||{s:0,n:0};e.s+=r._size;e.n++;agg.set(c,e);
-    }
-    for(const[c,e]of agg)avgSize.set(c,e.s/e.n/1e8);
+  // 观察时点 = 数据期内最大日期（流水/持仓）
+  let periodEnd=null;
+  for(const r of dfZqTrade){if(r._date&&(!periodEnd||r._date>periodEnd))periodEnd=r._date}
+  for(const r of dfPosClean){if(r._date&&(!periodEnd||r._date>periodEnd))periodEnd=r._date}
+  // 账户级辅助：最新规模 / 最新杠杆率
+  const latestSize=new Map();
+  for(const r of dfPosClean){
+    const c=toStr(r._code);if(!c||!r._date||!(r._size>0))continue;
+    const ex=latestSize.get(c);if(!ex||r._date>ex)latestSize.set(c,r._date);
   }
   const latestSizeVal=new Map();
   const latestLevVal=new Map();
-  const monthEndMap=new Map(); // code|month → 当月最后一条 {d,size,lev}（规模节点选择器用）
   for(const r of dfPosClean){const c=toStr(r._code);if(c&&latestSize.get(c)===r._date){latestSizeVal.set(c,r._size/1e8);if(r._lev!=null&&r._lev>0&&r._lev<=2)latestLevVal.set(c,r._lev)}}
-  for(const r of dfPosClean){
-    const c=toStr(r._code);if(!c||!r._date||!(r._size>0))continue;
-    const mk=c+'|'+getMonthKey(r._date);
-    const ex=monthEndMap.get(mk);if(!ex||r._date>ex.d)monthEndMap.set(mk,{d:r._date,size:r._size/1e8,lev:(r._lev!=null&&r._lev>0&&r._lev<=2)?r._lev:null});
-  }
-  const scaleByCodeMonth={};const sizeMonthSet=new Set();
-  for(const[k,v]of monthEndMap){
-    const[c,m]=k.split('|');
-    if(!scaleByCodeMonth[c])scaleByCodeMonth[c]={};
-    scaleByCodeMonth[c][m]={size:Math.round(v.size*100)/100,lev:v.lev};
-    sizeMonthSet.add(m);
-  }
-  for(const c of Object.keys(scaleByCodeMonth))scaleByCodeMonth[c].__latest={size:latestSizeVal.get(c)!=null?Math.round(latestSizeVal.get(c)*100)/100:null,lev:latestLevVal.get(c)!=null?latestLevVal.get(c):null};
-  const monthSet=new Set();
-  const cntByAcct=new Map();
-  for(const r of dfZqTrade){
-    if(r._month)monthSet.add(r._month);
-    const c=toStr(r._code);if(!c)continue;
-    cntByAcct.set(c,(cntByAcct.get(c)||0)+1);
-  }
-  const nMonths=Math.max(1,monthSet.size);
-  // 经理 → 账户（共管各记各的）
+  // 经理 → 账户（共管各记各的；账户池=universe）
   const mgrMap=new Map(); // key: line+'|'+name
   for(const code of Object.keys(dim)){
+    if(!universe.has(code))continue;
     const d=dim[code];
     for(const m of d.managers){
       const k=d.line+'|'+m;
@@ -476,13 +460,12 @@ function buildManagerAnalysis(acctDim,activeCodes,dfPosClean,dfZqTrade,fifo,ddMa
     }
   }
   const mgrs=[];
-  const acctDetail={}; // code → 清单行数据（规模/分摊收入/笔数/胜率/杠杆/策略）
+  const acctDetail={}; // code → 清单行数据（规模/分摊收入/换手率/胜率/杠杆/收益率/策略）
   for(const mg of mgrMap.values()){
     const accts=mg.accounts;
     const traded=accts.filter(c=>activeCodes.has(c));
-    let scale=0,income=0,freqSum=0,ryNum=0,ryDen=0;
+    let scale=0,income=0,toSum=0,rySum=0,ryN=0,ryMin=null,ryMax=null;
     const stratSet=new Set(),clientSet=new Set();
-    const incByM={},scaByM={};
     let newCount=0,newScale=0;
     for(const c of accts){
       const d=dim[c];
@@ -493,33 +476,29 @@ function buildManagerAnalysis(acctDim,activeCodes,dfPosClean,dfZqTrade,fifo,ddMa
       if(st&&st.cat2)stratSet.add(st.cat2);
       if(d.clientType)clientSet.add('T:'+d.clientType);
       if(d.fundSource)clientSet.add('S:'+d.fundSource);
-      // 交易频率：户均月均笔数（账户数简单平均，无交易账户计 0）
-      const cnt=cntByAcct.get(c);
-      freqSum+=(cnt||0)/nMonths;
-      // 今年以来收益率：策略业绩表账户级值，经理级=最新规模加权（无规模账户等权兜底，缺失不计）
+      // 月均换手率：策略表∩流水重合账户取六信号口径月均换手率（当月买卖额÷当月日均规模的各月平均）；无流水/算不出默认 0；经理=户均简单平均
+      const tov=idMap&&idMap[c]&&idMap[c].turnover!=null?idMap[c].turnover:0;
+      toSum+=tov;
+      // 今年以来收益率：户均简单平均（无值不计入）；剔除观察时点距开始运作不足 3 个月的账户
       const ff=fifo&&fifo.map?fifo.map[c]:null;
       const ry=st?st.retYtd:null;
-      if(ry!=null){
-        const w=sz>0?sz:0;
-        if(w>0){ryNum+=ry*w;ryDen+=w}
-        else{ryNum+=ry;ryDen+=1}
+      const sd0=d.startDate?parseDate(d.startDate):null;
+      const tenureOk=!sd0||!periodEnd||((periodEnd-sd0)/86400000)>=MGR_TENURE_MIN_DAYS;
+      const ryIncluded=ry!=null&&tenureOk;
+      if(ryIncluded){
+        rySum+=ry;ryN++;
+        if(ryMin===null||ry<ryMin)ryMin=ry;
+        if(ryMax===null||ry>ryMax)ryMax=ry;
       }
-      if(!acctDetail[c])acctDetail[c]={code:c,scale:Math.round(sz*100)/100,income:Math.round((sharedFeeByCode[c]||0)/1e4*100)/100,trades:cnt||0,winRate:ff?ff.winRate:null,lev:latestLevVal.get(c)!=null?latestLevVal.get(c):null,retYtd:ry!=null?ry:null,cat1:st?st.cat1:'',cat2:st?st.cat2:'',traded:activeCodes.has(c)};
-      // 月度走势：收入（分摊）与规模（月末）
-      const fm=feeByCodeMonth[c];
-      if(fm)for(const m of Object.keys(fm))incByM[m]=(incByM[m]||0)+fm[m]/1e4;
-      const sm=scaleByCodeMonth[c];
-      if(sm)for(const m of Object.keys(sm)){if(m==='__latest')continue;if(sm[m].size!=null)scaByM[m]=(scaByM[m]||0)+sm[m].size}
+      if(!acctDetail[c])acctDetail[c]={code:c,scale:Math.round(sz*100)/100,income:Math.round((sharedFeeByCode[c]||0)/1e4*100)/100,turnover:Math.round(tov*100)/100,winRate:ff?ff.winRate:null,lev:latestLevVal.get(c)!=null?latestLevVal.get(c):null,retYtd:ry!=null?ry:null,ryExcluded:ry!=null&&!tenureOk,cat1:st?st.cat1:'',cat2:st?st.cat2:'',traded:activeCodes.has(c)};
       // 新开户贡献（年内新开标签口径）
       if(newAcctSet&&newAcctSet.has(c)){newCount++;newScale+=sz}
     }
     mgrs.push({name:mg.name,line:mg.line,accounts:accts,tradedCount:traded.length,
       acctCount:accts.length,scale:Math.round(scale*100)/100,income:Math.round(income/1e4*100)/100,
       stratRich:stratSet.size,clientRich:clientSet.size,
-      tradeFreq:accts.length>0?Math.round(freqSum/accts.length*100)/100:null,
-      retYtd:ryDen>0?Math.round(ryNum/ryDen*100)/100:null,
-      monthlyIncome:sizeMonthSet?Array.from(feeMonthSet).sort().map(m=>({month:m,amt:Math.round((incByM[m]||0)*100)/100})):[],
-      monthlyScale:Array.from(sizeMonthSet).sort().map(m=>({month:m,size:Math.round((scaByM[m]||0)*100)/100})),
+      turnover:accts.length>0?Math.round(toSum/accts.length*100)/100:null,
+      retYtd:ryN>0?Math.round(rySum/ryN*100)/100:null,retYtdMin:ryMin,retYtdMax:ryMax,retYtdN:ryN,
       newCount,newScale:Math.round(newScale*100)/100});
   }
   mgrs.sort((a,b)=>b.scale-a.scale);
@@ -539,7 +518,7 @@ function buildManagerAnalysis(acctDim,activeCodes,dfPosClean,dfZqTrade,fifo,ddMa
     m.pct={};m.pctNote=notes[m.line+'|'+m.name]||'';
     for(const d of MGR_DIMS)m.pct[d.key]=pctOf(pool,m,d.key);
   }
-  return{hasData:mgrs.length>0,mgrs,lines,acctDetail,feeByCodeMonth,feeMonths:Array.from(feeMonthSet).sort(),scaleByCodeMonth,sizeMonths:Array.from(sizeMonthSet).sort(),dimCounts:{iamTg:acctInfoRowCount(acctDim,'iamTg'),iamCf:acctInfoRowCount(acctDim,'iamCf')}};
+  return{hasData:mgrs.length>0,mgrs,lines,acctDetail,feeByCodeMonth,feeMonths:Array.from(feeMonthSet).sort(),universeSrc,universeSize:universe.size,dimCounts:{iamTg:acctInfoRowCount(acctDim,'iamTg'),iamCf:acctInfoRowCount(acctDim,'iamCf')}};
 }
 function acctInfoRowCount(acctDim,line){
   return Object.values(acctDim.dim).filter(d=>d.line===line).length;
@@ -2372,7 +2351,7 @@ function runAnalysis(rawHg,rawZq,rawPos,hdStart,hdEnd,salesDropped,acctInfo){
   let dimMatchStats=null;
   if(acctDim){
     const newAcctSet=new Set(Object.keys(behaviorTags.tags).filter(c=>behaviorTags.tags[c].some(t=>t.label.includes('新开'))));
-    manager=buildManagerAnalysis(acctDim,activeCodesSet,dfPosClean,dfZqTrade,fifo,posHealth?posHealth.ddMap:null,newAcctSet);
+    manager=buildManagerAnalysis(acctDim,activeCodesSet,dfPosClean,dfZqTrade,fifo,posHealth?posHealth.ddMap:null,newAcctSet,identity.idMap);
     const dimCodes=Object.keys(acctDim.dim);
     const matched=dimCodes.filter(c=>activeCodesSet.has(c)).length;
     dimMatchStats={dimTotal:dimCodes.length,matched,unmatchedActive:[...activeCodesSet].filter(c=>!acctDim.dim[c]).length,stratRows:Object.keys(acctDim.strat).length,stratMatched:Object.keys(acctDim.strat).filter(c=>activeCodesSet.has(c)).length,feeStats:acctDim.feeStats,found:acctDim.found};
@@ -2515,7 +2494,7 @@ function renderAllTabs(result){
 }
 
 // ===== 批次2：投资经理页 =====
-const managerState={line:'投资顾问部',name:null,feeFrom:'',feeTo:'',acctTagFilter:null};
+const managerState={line:'投资顾问部',name:null,feeFrom:'',feeTo:'',acctTagFilter:null,acctSort:{col:-1,asc:true}};
 // 收入效率：月均收入分母 = 收入区间内投顾费有成交确认记录的月份数
 function mgrFeeRangeMonths(){
   const mg=currentResult&&currentResult.manager;
@@ -2591,8 +2570,8 @@ function renderManagerTab(r){
     </div></div>`;
   }
   const stat=r.inputInfo&&r.inputInfo.acctInfo;
-  return`<div class="card"><div class="card-header"><div class="card-title">投资经理分析 <span class="badge badge-gray">${mg.dimCounts.iamTg+mg.dimCounts.iamCf} 个维表账户 · ${mg.mgrs.length} 位经理</span></div></div><div class="card-body">
-    <p style="color:#64748b;font-size:13px;margin-bottom:12px">部门分开比较：分位 = 部门内小于他的人数 ÷ (部门人数−1) × 100；部门不足 5 人时按全体分位并注明。悬停雷达图显示原始值。共管账户标「共管」，其收入按 1/N（N=经理数）分摊计入每位经理。贡献收入=投顾费全状态计入（成交确认/审批通过/审批中），收入区间筛选联动雷达收入维、对比表与账户清单；规模节点选择月末后，管理规模/隐含费率/杠杆/清单规模列按该月末数据更新。交易频率 = 名下账户月均笔数的户均简单平均（含无交易账户计 0）。对比表另含收入效率：隐含费率 = 区间收入(万) ÷ 管理规模(亿)，月均收入 = 区间收入 ÷ 区间费用覆盖月数。雷达第 7 维「今年以来收益率」取策略业绩表账户值按规模加权（该表未上传或无数据时此维无值）。</p>
+  return`<div class="card"><div class="card-header"><div class="card-title">投资经理分析 <span class="badge badge-gray">账户池：${mg.universeSrc} ${mg.universeSize} 户 · ${mg.mgrs.length} 位经理</span></div></div><div class="card-body">
+    <p style="color:#64748b;font-size:13px;margin-bottom:12px">账户池 = 账户策略及业绩表（截面存续账户，含不在流水/持仓中的账户；该表无数据时回退 IAM 维表），经理归属经 IAM 维表项目编号匹配。部门分开比较：分位 = 部门内小于他的人数 ÷ (部门人数−1) × 100；部门不足 5 人时按全体分位并注明。悬停雷达图显示原始值。共管账户标「共管」，其收入按 1/N（N=经理数）分摊计入每位经理，规模全额各计。贡献收入=投顾费全状态计入（成交确认/审批通过/审批中），收入区间筛选联动雷达收入维、对比表与账户清单。月均换手率 = 名下账户换手率的户均简单平均（策略表∩流水重合账户取六信号口径月均换手率，无流水账户计 0）。今年以来平均收益率 = 名下账户今年以来收益率的户均简单平均（无值不计入，并剔除观察时点距开始运作不足 3 个月的账户），附收益率区间。收入效率：隐含费率 = 区间收入(万) ÷ 管理规模(亿)，月均收入 = 区间收入 ÷ 区间费用覆盖月数。</p>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
       <span style="font-size:13px;color:#64748b">部门：</span>
       <select id="mgrLine" onchange="onMgrLine(this.value)" style="padding:6px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
@@ -2605,8 +2584,6 @@ function renderManagerTab(r){
       <select id="mgrFeeFrom" onchange="onMgrFeeRange()" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px"><option value="">全部月起</option>${(mg.feeMonths||[]).map(m=>`<option value="${m}">${m}</option>`).join('')}</select>
       <span style="font-size:13px;color:#64748b">~</span>
       <select id="mgrFeeTo" onchange="onMgrFeeRange()" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px"><option value="">全部月止</option>${(mg.feeMonths||[]).map(m=>`<option value="${m}">${m}</option>`).join('')}</select>
-      <span style="font-size:13px;color:#64748b">规模节点：</span>
-      <select id="mgrSizeMonth" onchange="onMgrSizeMonth()" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px"><option value="">最新（默认）</option>${(mg.sizeMonths||[]).map(m=>`<option value="${m}">${m} 月末</option>`).join('')}</select>
       <span id="mgrNote" style="font-size:12px;color:#b45309"></span>
     </div>
     ${stat?`<p style="font-size:12px;color:#94a3b8;margin-bottom:8px">维表账户 ${stat.dimTotal} 个，匹配本期交易账户 ${stat.matched} 个；策略业绩表 ${stat.stratRows} 行（命中交易账户 ${stat.stratMatched}）；投顾费 ${stat.feeStats.rows} 行，计入收入 ${(stat.feeStats.totalAll/1e4).toLocaleString(undefined,{maximumFractionDigits:1})} 万元（全状态口径，其中成交确认 ${(stat.feeStats.confirmed/1e4).toLocaleString(undefined,{maximumFractionDigits:1})} 万）</p>`:''}
@@ -2618,14 +2595,10 @@ function renderManagerTab(r){
       <div><div class="section-title" style="margin-top:0">名下账户类型（官方二级分类，账户数）</div><div id="chart-mgr-donut-type" class="chart" style="height:260px"></div><div id="mgrTopAccts"></div></div>
       <div><div class="section-title" style="margin-top:0">名下委托人类型（账户数）</div><div id="chart-mgr-donut-client" class="chart" style="height:260px"></div><div id="mgrTopClients"></div></div>
     </div>
-    <div class="grid-2" style="margin-top:16px">
-      <div><div class="section-title" style="margin-top:0">收入月度走势（分摊后，全区间口径，不受收入区间筛选影响）</div><div id="chart-mgr-inc-ts" class="chart" style="height:220px"></div></div>
-      <div><div class="section-title" style="margin-top:0">规模月度走势（月末时点合计）</div><div id="chart-mgr-scale-ts" class="chart" style="height:220px"></div><div id="mgrNewContrib" style="margin-top:8px"></div></div>
-    </div>
   </div></div>
   <div class="card"><div class="card-header"><div class="card-title">风格与风险画像（名下账户汇总）</div></div><div class="card-body"><div id="mgrStyleBox"><div class="empty-state">选择经理后展示</div></div></div></div>
   <div class="card"><div class="card-header"><div class="card-title">同部门经理对比（点击行切换经理）</div></div><div class="card-body"><div id="mgrCompareWrap"></div></div></div>
-  <div class="card"><div class="card-header"><div class="card-title">名下账户清单（点击代码跳完整画像）</div></div><div class="card-body"><div id="mgrAcctWrap"></div></div></div>`;
+  <div class="card"><div class="card-header"><div class="card-title">名下账户清单（点击表头排序，点击代码跳完整画像）</div></div><div class="card-body"><div id="mgrAcctWrap"></div></div></div>`;
 }
 function mgrPool(line){
   const mg=currentResult&&currentResult.manager;
@@ -2658,8 +2631,13 @@ function refreshManagerPanel(){
   if(rawBox){
     if(m){
       const ex=mgrIncomeExtras(m);
-      rawBox.innerHTML=renderTable(['维度','原值','部门内分位'],MGR_DIMS.map(d=>[d.label,mgrRawText(m,d.key,d.unit),m.pct[d.key]!=null?m.pct[d.key]+' 分位':'-']))
-        +`<p style="font-size:12px;color:#64748b;margin-top:8px">收入效率（随收入区间）：隐含费率 <strong>${ex.rate!=null?ex.rate+' 万/亿':'-'}</strong> · 月均收入 <strong>${ex.monthly!=null?ex.monthly+' 万/月':'-'}</strong>（区间费用覆盖 ${ex.months} 个月）</p>`;
+      rawBox.innerHTML=renderTable(['维度','原值','部门内分位'],MGR_DIMS.map(d=>{
+        let v=mgrRawText(m,d.key,d.unit);
+        if(d.key==='retYtd'&&m.retYtd!=null&&m.retYtdMin!=null)v+=`（区间 ${m.retYtdMin}%~${m.retYtdMax}%，计入 ${m.retYtdN} 户）`;
+        return[d.label,v,m.pct[d.key]!=null?m.pct[d.key]+' 分位':'-'];
+      }))
+        +`<p style="font-size:12px;color:#64748b;margin-top:8px">收入效率（随收入区间）：隐含费率 <strong>${ex.rate!=null?ex.rate+' 万/亿':'-'}</strong> · 月均收入 <strong>${ex.monthly!=null?ex.monthly+' 万/月':'-'}</strong>（区间费用覆盖 ${ex.months} 个月）</p>`
+        +`<p style="font-size:12px;color:#64748b;margin-top:4px">新开户贡献（年内新开标签口径）：名下新开 <strong>${m.newCount}</strong> 户，合计最新规模 <strong>${m.newScale}</strong> 亿${m.acctCount>0?`（占管理账户数 ${(m.newCount/m.acctCount*100).toFixed(0)}%${m.scale>0?`，占管理规模 ${(m.newScale/m.scale*100).toFixed(0)}%`:''}）`:''}</p>`;
     }else rawBox.innerHTML='<div class="empty-state">无数据</div>';
   }
   // 风格与风险画像
@@ -2691,21 +2669,6 @@ function refreshManagerPanel(){
     const topC=Object.entries(cInc).sort((a,b)=>b[1]-a[1]).filter(([,v])=>v>0).slice(0,3);
     const tcEl=document.getElementById('mgrTopClients');
     if(tcEl)tcEl.innerHTML=`<div class="section-title" style="margin-top:8px">Top 委托人类型（区间收入）</div>${topC.length?topC.map(([k,v],i)=>`<div style="font-size:13px;padding:3px 0">${i+1}. ${k} <strong style="float:right">${Math.round(v*100)/100} 万</strong></div>`).join(''):'<div style="font-size:12px;color:#94a3b8">区间内无投顾费记录</div>'}`;
-    // 月度走势：收入（分摊，全区间不受筛选影响）+ 规模（月末）+ 新开户贡献
-    const incEl=document.getElementById('chart-mgr-inc-ts');
-    if(incEl){
-      let ch=echarts.getInstanceByDom(incEl);if(!ch)ch=echarts.init(incEl);
-      chartInstances['mgrIncTs']=ch;
-      ch.setOption({tooltip:{trigger:'axis',valueFormatter:v=>v+' 万'},grid:{left:'3%',right:'4%',bottom:'3%',containLabel:true},xAxis:{type:'category',data:m.monthlyIncome.map(x=>x.month)},yAxis:{type:'value',name:'万元'},series:[{type:'bar',data:m.monthlyIncome.map(x=>x.amt),itemStyle:{color:'#10b981'}}]},true);
-    }
-    const scaEl=document.getElementById('chart-mgr-scale-ts');
-    if(scaEl){
-      let ch=echarts.getInstanceByDom(scaEl);if(!ch)ch=echarts.init(scaEl);
-      chartInstances['mgrScaleTs']=ch;
-      ch.setOption({tooltip:{trigger:'axis',valueFormatter:v=>v+' 亿'},grid:{left:'3%',right:'4%',bottom:'3%',containLabel:true},xAxis:{type:'category',data:m.monthlyScale.map(x=>x.month)},yAxis:{type:'value',name:'亿元',scale:true},series:[{type:'line',data:m.monthlyScale.map(x=>x.size),smooth:true,connectNulls:true,color:'#1d4ed8',areaStyle:{opacity:0.08}}]},true);
-    }
-    const newEl=document.getElementById('mgrNewContrib');
-    if(newEl)newEl.innerHTML=`<span style="font-size:13px;color:#334155">新开户贡献（年内新开标签口径）：名下新开 <strong>${m.newCount}</strong> 户，合计最新规模 <strong>${m.newScale}</strong> 亿${m.acctCount>0?`（占管理账户数 ${(m.newCount/m.acctCount*100).toFixed(0)}%${m.scale>0?`，占管理规模 ${(m.newScale/m.scale*100).toFixed(0)}%`:''}）`:''}</span>`;
   }
   // 雷达
   const radarEl=document.getElementById('chart-mgr-radar');
@@ -2722,11 +2685,11 @@ function refreshManagerPanel(){
   // 同部门对比表
   const cmpWrap=document.getElementById('mgrCompareWrap');
   if(cmpWrap){
-    cmpWrap.innerHTML=renderTable(['经理','管理账户数','管理规模(亿)','贡献收入(万)','隐含费率(万/亿)','月均收入(万/月)','策略丰富度','客群丰富度','交易频率(笔/月·户均)','今年以来收益率(%)'],
-      pool.map(x=>{const ex=mgrIncomeExtras(x);return[x.name===managerState.name?`<strong>${x.name} ★</strong>`:x.name,x.acctCount,x.scale,x.income,ex.rate!=null?ex.rate:'-',ex.monthly!=null?ex.monthly:'-',x.stratRich,x.clientRich,x.tradeFreq!=null?x.tradeFreq:'-',x.retYtd!=null?x.retYtd:'-']}),
+    cmpWrap.innerHTML=renderTable(['经理','管理账户数','管理规模(亿)','贡献收入(万)','隐含费率(万/亿)','月均收入(万/月)','策略丰富度','客群丰富度','月均换手率(倍)','今年以来平均收益率(%)'],
+      pool.map(x=>{const ex=mgrIncomeExtras(x);return[x.name===managerState.name?`<strong>${x.name} ★</strong>`:x.name,x.acctCount,x.scale,x.income,ex.rate!=null?ex.rate:'-',ex.monthly!=null?ex.monthly:'-',x.stratRich,x.clientRich,x.turnover!=null?x.turnover:'-',x.retYtd!=null?x.retYtd+(x.retYtdMin!=null?`（${x.retYtdMin}~${x.retYtdMax}）`:''):'-']}),
       {rowClass:x=>x[0].includes('★')?'anomaly-row':'',rowClick:x=>`onMgrPick('${x[0].replace(/<[^>]*>/g,'').replace(' ★','')}')`});
   }
-  // 名下账户清单（支持行为标签过滤）
+  // 名下账户清单（表头点击排序 + 行为标签过滤）
   const acctWrap=document.getElementById('mgrAcctWrap');
   if(acctWrap){
     if(!m){acctWrap.innerHTML='<div class="empty-state">无数据</div>';return}
@@ -2738,14 +2701,34 @@ function refreshManagerPanel(){
       const pred=(MGR_TAG_PRED.find(p=>p[0]===managerState.acctTagFilter)||[])[1];
       if(pred)acctList=m.accounts.filter(c=>bt[c]&&bt[c].some(pred));
     }
-    const rows=acctList.map(c=>{
+    const rowsData=acctList.map(c=>{
       const d=dim[c]||{};
       const dd=det[c]||{};
       const co=d.managers&&d.managers.length>1?` <span class="badge badge-amber">共管:${d.managers.filter(x=>x!==m.name).join('、')}</span>`:'';
-      return[`<a href="javascript:void(0)" onclick="jumpToProfile('${c}')"><span class="font-mono">${c}</span></a>`,(d.sacName||'-')+co,d.group||'-',d.clientType||'-',d.fundSource||'-',dd.traded?'✓':'<span style="color:#94a3b8">无交易</span>',dd.scale||'-',dd.income||0,dd.trades||0,dd.winRate!=null?dd.winRate+'%':'-',(dd.cat1||'')+(dd.cat2?'/'+dd.cat2:'')||'-'];
+      const ryCell=dd.retYtd!=null?dd.retYtd+'%'+(dd.ryExcluded?'<span class="badge badge-amber" title="观察时点距开始运作不足3个月，未计入经理平均">未满3月</span>':''):'-';
+      return{
+        cells:[`<a href="javascript:void(0)" onclick="jumpToProfile('${c}')"><span class="font-mono">${c}</span></a>`,(d.sacName||'-')+co,d.group||'-',d.clientType||'-',d.fundSource||'-',dd.traded?'✓':'<span style="color:#94a3b8">无交易</span>',dd.scale||'-',dd.income||0,dd.turnover!=null?dd.turnover:0,dd.winRate!=null?dd.winRate+'%':'-',ryCell,(dd.cat1||'')+(dd.cat2?'/'+dd.cat2:'')||'-'],
+        vals:[c,d.sacName||'',d.group||'',d.clientType||'',d.fundSource||'',dd.traded?1:0,dd.scale||0,dd.income||0,dd.turnover||0,dd.winRate!=null?dd.winRate:-1,dd.retYtd!=null?dd.retYtd:-999,(dd.cat1||'')+(dd.cat2||'')]
+      };
     });
-    acctWrap.innerHTML=renderPaginatedTable('mgrAccts',['账户代码','账户名称','所属组别','委托人类型','资金来源','本期有交易',managerState.sizeMonth?`规模(亿)@${managerState.sizeMonth}末`:'最新规模(亿)','贡献收入(万)','交易笔数','FIFO胜率','策略(官方)'],rows);
+    const sc=managerState.acctSort;
+    if(sc&&sc.col>=0){
+      rowsData.sort((a,b)=>{
+        const va=a.vals[sc.col],vb=b.vals[sc.col];
+        const cmp=(typeof va==='number'&&typeof vb==='number')?va-vb:String(va).localeCompare(String(vb),'zh');
+        return sc.asc?cmp:-cmp;
+      });
+    }
+    const sortableH=(label,i)=>`<span style="cursor:pointer;user-select:none" onclick="onMgrAcctSort(${i})" title="点击排序">${label}${sc&&sc.col===i?(sc.asc?' ↑':' ↓'):''}</span>`;
+    const headers=['账户代码','账户名称','所属组别','委托人类型','资金来源','本期有交易','最新规模(亿)','贡献收入(万)','月均换手率(倍)','FIFO胜率','今年以来收益率','策略(官方)'].map((h,i)=>sortableH(h,i));
+    acctWrap.innerHTML=renderPaginatedTable('mgrAccts',headers,rowsData.map(x=>x.cells));
   }
+}
+function onMgrAcctSort(col){
+  const sc=managerState.acctSort;
+  if(sc.col===col)sc.asc=!sc.asc;
+  else{sc.col=col;sc.asc=false}
+  refreshManagerPanel();
 }
 function onMgrPick(name){
   managerState.name=name;
@@ -2776,32 +2759,6 @@ function onMgrFeeRange(){
   applyMgrFeeFilter();
   refreshManagerPanel();
 }
-// 批次3：规模节点选择——管理规模/隐含费率/杠杆/清单规模列切换到所选月末（默认最新）
-function applyMgrSizeMonth(){
-  const mg=currentResult&&currentResult.manager;
-  if(!mg||!mg.hasData)return;
-  const sm=managerState.sizeMonth;
-  const sbm=mg.scaleByCodeMonth||{};
-  for(const c of Object.keys(mg.acctDetail||{})){
-    const mm=sbm[c];
-    const e=mm?(sm&&mm[sm]?mm[sm]:mm.__latest):null;
-    mg.acctDetail[c].scale=e&&e.size!=null?e.size:0;
-    mg.acctDetail[c].lev=e?e.lev:null;
-  }
-  for(const m of mg.mgrs){let s=0;for(const c of m.accounts){const d=mg.acctDetail[c];if(d)s+=d.scale||0}m.scale=Math.round(s*100)/100}
-  for(const m of mg.mgrs){
-    let pool=mg.mgrs.filter(x=>x.line===m.line);
-    if(pool.length<5)pool=mg.mgrs;
-    const less=pool.filter(x=>x.scale<m.scale).length;
-    m.pct.scale=pool.length<2?null:Math.round(less/(pool.length-1)*100);
-  }
-}
-function onMgrSizeMonth(){
-  const el=document.getElementById('mgrSizeMonth');
-  managerState.sizeMonth=el?el.value:'';
-  applyMgrSizeMonth();
-  refreshManagerPanel();
-}
 function initManagerTab(r){
   if(!r.manager||!r.manager.hasData)return;
   const lineEl=document.getElementById('mgrLine');
@@ -2810,15 +2767,11 @@ function initManagerTab(r){
   if(fEl)fEl.value=managerState.feeFrom;
   if(tEl)tEl.value=managerState.feeTo;
   if(managerState.feeFrom||managerState.feeTo)applyMgrFeeFilter();
-  const sEl=document.getElementById('mgrSizeMonth');
-  if(sEl)sEl.value=managerState.sizeMonth;
-  if(managerState.sizeMonth)applyMgrSizeMonth();
   const pool=mgrPool(managerState.line);
   if(!managerState.name||!pool.find(x=>x.name===managerState.name))managerState.name=pool.length?pool[0].name:null;
   refreshManagerPanel();
 }
 
-// ===== 批次3：故事行为页（账户月度叙事时间线）=====
 // ===== 批次3：故事行为页（三层级：账户/经理/整体 + 转折点徽标 + 任意月月度报告）=====
 const storyState={level:'account',code:null,mgr:'',reportMonth:''};
 function storyTopAccounts(r){
