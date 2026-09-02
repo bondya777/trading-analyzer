@@ -328,8 +328,8 @@ function parseHoldingsWb(wb,label){
 // ===== 批次2：槽位⑤ 账户信息/投顾费 解析（按表头特征自动识别五类表）=====
 // 识别特征：静态收益率→账户策略及业绩；费用类别→投顾费；所属组别/中心→IAM投顾；投资组别→IAM财富；工号+姓名→员工工号对照表
 const ACCTINFO_KEEP={
-  strategy:['项目编号','SAC账户名称','一级分类','二级分类','明细','业绩基准','账户规模（亿元）','债券规模（亿元）','成立以来收益率','今年以来收益率','静态收益率','基点（万元）','资产久期','杠杆率'],
-  fees:['交易状态','投顾账户编号','收付款日期','费用(元)','费用类别','提交审核人','业务审核人'],
+  strategy:['项目编号','SAC账户名称','一级分类','二级分类','明细','业绩基准','委托人/渠道','账户规模（亿元）','债券规模（亿元）','成立以来收益率','今年以来收益率','静态收益率','基点（万元）','资产久期','杠杆率'],
+  fees:['交易状态','投顾账户编号','收付款日期','费用(元)','费用类别','投顾委托人','提交审核人','业务审核人'],
   iamTg:['项目编号','SAC账户名称','资金来源','所属组别/中心','所属策略组','投顾投资经理','投顾投资助理','量化投资经理','是否2026重点业务','项目委托人','委托人部门或分行','委托人类型','项目起始运作日','合同到期日','银行间债券估值方法','交易所债券估值方法','业绩基准(%)'],
   iamCf:['项目编号','SAC账户名称','资金来源','投资组别','投顾投资经理','投顾投资助理','委托人(代销渠道)','委托人部门或分行','委托人类型','项目起始运作日','合同到期日','业绩基准(%)'],
   emp:['一级分组','工号','姓名','岗位']
@@ -395,7 +395,7 @@ function buildAcctDim(acctInfo){
   const strat={};
   for(const r of acctInfo.strategy){
     const code=toStr(r['项目编号']);if(!code)continue;
-    strat[code]={code,cat1:toStr(r['一级分类']),cat2:toStr(r['二级分类']),detail:toStr(r['明细']),bench:toNumOrNull(r['业绩基准']),size:toNumOrNull(r['账户规模（亿元）']),retSince:toNumOrNull(r['成立以来收益率']),retYtd:toNumOrNull(r['今年以来收益率']),retStatic:toNumOrNull(r['静态收益率']),dv01:toNumOrNull(r['基点（万元）']),duration:toNumOrNull(r['资产久期']),lev:toNumOrNull(r['杠杆率']),sacName:toStr(r['SAC账户名称'])};
+    strat[code]={code,cat1:toStr(r['一级分类']),cat2:toStr(r['二级分类']),detail:toStr(r['明细']),bench:toNumOrNull(r['业绩基准']),clientCh:toStr(r['委托人/渠道']),size:toNumOrNull(r['账户规模（亿元）']),retSince:toNumOrNull(r['成立以来收益率']),retYtd:toNumOrNull(r['今年以来收益率']),retStatic:toNumOrNull(r['静态收益率']),dv01:toNumOrNull(r['基点（万元）']),duration:toNumOrNull(r['资产久期']),lev:toNumOrNull(r['杠杆率']),sacName:toStr(r['SAC账户名称'])};
   }
   // 投顾费：收入口径=全部交易状态（成交确认/审批通过/审批中均计入）
   const feeRows=[];const feeByCode={};let feeTotalAll=0,feeConfirmed=0;
@@ -404,7 +404,7 @@ function buildAcctDim(acctInfo){
     const amt=toNum(r['费用(元)']);
     const st=toStr(r['交易状态']);
     const d=parseDate(r['收付款日期']);
-    feeRows.push({code,date:d?fmtDate(d):'',month:d?getMonthKey(d):'',amount:amt,cat:toStr(r['费用类别']),status:st,submitter:toStr(r['提交审核人']),reviewer:toStr(r['业务审核人'])});
+    feeRows.push({code,date:d?fmtDate(d):'',month:d?getMonthKey(d):'',amount:amt,cat:toStr(r['费用类别']),client:toStr(r['投顾委托人']),status:st,submitter:toStr(r['提交审核人']),reviewer:toStr(r['业务审核人'])});
     feeTotalAll+=amt;
     if(st==='成交确认')feeConfirmed+=amt;
     if(code)feeByCode[code]=(feeByCode[code]||0)+amt;
@@ -470,6 +470,21 @@ function buildManagerAnalysis(acctDim,activeCodes,dfPosClean,dfZqTrade,fifo,ddMa
       if(universe.has(code))mgrMap.get(k).accounts.push(code);
     }
   }
+  // 收入前三委托人底账：投顾费「投顾委托人」口径，全部月份全状态，全账户（含已到期），共管 1/N 分摊
+  const clientIncByMgr=new Map(); // mgrKey → Map(委托人→元)
+  for(const fr of acctDim.feeRows||[]){
+    if(!fr.code||!fr.client)continue;
+    const d=dim[fr.code];
+    if(!d||!d.managers||!d.managers.length)continue;
+    const share=fr.amount/d.managers.length;
+    for(const mName of d.managers){
+      const k=d.line+'|'+mName;
+      if(!clientIncByMgr.has(k))clientIncByMgr.set(k,new Map());
+      const mm=clientIncByMgr.get(k);
+      mm.set(fr.client,(mm.get(fr.client)||0)+share);
+    }
+  }
+  const top3of=map=>[...map.entries()].filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).slice(0,3);
   const mgrs=[];
   const acctDetail={}; // code → 清单行数据（规模/收入均 1/N 分摊；feeAccounts 也在册以支撑收入 Top3）
   // 先为全部维表账户建收入/分摊规模底账
@@ -480,7 +495,7 @@ function buildManagerAnalysis(acctDim,activeCodes,dfPosClean,dfZqTrade,fifo,ddMa
     const accts=mg.accounts;
     const traded=accts.filter(c=>activeCodes.has(c));
     let scale=0,income=0,toSum=0,rySum=0,ryN=0,ryMin=null,ryMax=null;
-    const stratSet=new Set(),clientSet=new Set();
+    const stratSet=new Set(),clientSet=new Set(),clientScaleMap=new Map();
     let newCount=0,newScale=0;
     // 贡献收入：全账户口径（含已到期/不在策略表的维表账户）
     for(const c of mg.feeAccounts)income+=sharedFeeByCode[c]||0;
@@ -490,16 +505,18 @@ function buildManagerAnalysis(acctDim,activeCodes,dfPosClean,dfZqTrade,fifo,ddMa
       scale+=sz*shareOf(c); // 共管规模也按 1/N 平分（策略表口径）
       const st=strat[c];
       if(st&&st.cat2)stratSet.add(st.cat2);
+      if(st&&st.clientCh)clientScaleMap.set(st.clientCh,(clientScaleMap.get(st.clientCh)||0)+sz*shareOf(c)); // 规模前三委托人：策略表「委托人/渠道」口径
       if(d.clientType)clientSet.add(d.clientType); // 客群丰富度：仅按委托人类型去重（策略表存续账户口径）
       // 月均换手率：策略表∩流水重合账户取六信号口径月均换手率（当月买卖额÷当月日均规模的各月平均）；无流水/算不出默认 0；经理=户均简单平均
       const tov=idMap&&idMap[c]&&idMap[c].turnover!=null?idMap[c].turnover:0;
       toSum+=tov;
-      // 今年以来收益率：户均简单平均（无值不计入）；剔除观察时点距开始运作不足 3 个月的账户
+      // 今年以来收益率：户均简单平均（无值不计入）；剔除观察时点距开始运作不足 3 个月、以及收益率超过 10% 的异常账户
       const ff=fifo&&fifo.map?fifo.map[c]:null;
       const ry=st?st.retYtd:null;
       const sd0=d.startDate?parseDate(d.startDate):null;
       const tenureOk=!sd0||!periodEnd||((periodEnd-sd0)/86400000)>=MGR_TENURE_MIN_DAYS;
-      const ryIncluded=ry!=null&&tenureOk;
+      const outlier=ry!=null&&ry>10; // 收益率>10% 视为异常值剔除
+      const ryIncluded=ry!=null&&tenureOk&&!outlier;
       if(ryIncluded){
         rySum+=ry;ryN++;
         if(ryMin===null||ry<ryMin)ryMin=ry;
@@ -510,7 +527,8 @@ function buildManagerAnalysis(acctDim,activeCodes,dfPosClean,dfZqTrade,fifo,ddMa
       det.turnover=Math.round(tov*100)/100;
       det.winRate=ff?ff.winRate:null;
       det.retYtd=ry!=null?ry:null;
-      det.ryExcluded=ry!=null&&!tenureOk;
+      det.ryExcluded=ry!=null&&(!tenureOk||outlier);
+      det.ryExclReason=ry==null?'':(outlier?'>10%剔除':(!tenureOk?'未满3月':''));
       det.cat1=st?st.cat1:'';
       det.cat2=st?st.cat2:'';
       // 新开户贡献（年内新开标签口径；规模按分摊后计）
@@ -521,6 +539,8 @@ function buildManagerAnalysis(acctDim,activeCodes,dfPosClean,dfZqTrade,fifo,ddMa
       stratRich:stratSet.size,clientRich:clientSet.size,hasShared:accts.some(c=>dim[c]&&dim[c].managers&&dim[c].managers.length>1),
       turnover:accts.length>0?Math.round(toSum/accts.length*100)/100:null,
       retYtd:ryN>0?Math.round(rySum/ryN*100)/100:null,retYtdMin:ryMin,retYtdMax:ryMax,retYtdN:ryN,
+      topClientScale:top3of(clientScaleMap).map(([name,v])=>({name,val:Math.round(v*100)/100})),
+      topClientInc:top3of(clientIncByMgr.get(mg.line+'|'+mg.name)||new Map()).map(([name,v])=>({name,val:Math.round(v)})),
       newCount,newScale:Math.round(newScale*100)/100});
   }
   mgrs.sort((a,b)=>b.scale-a.scale);
@@ -2594,7 +2614,7 @@ function renderManagerTab(r){
   }
   const stat=r.inputInfo&&r.inputInfo.acctInfo;
   return`<div class="card"><div class="card-header"><div class="card-title">投资经理分析 <span class="badge badge-gray">账户池：${mg.universeSrc} ${mg.universeSize} 户 · ${mg.mgrs.length} 位经理</span></div></div><div class="card-body">
-    <p style="color:#64748b;font-size:13px;margin-bottom:12px">账户池 = 账户策略及业绩表（截面存续账户，含不在流水/持仓中的账户；该表无数据时回退 IAM 维表），经理归属经 IAM 维表项目编号匹配。部门分开比较：分位 = 部门内小于他的人数 ÷ (部门人数−1) × 100；部门不足 5 人时按全体分位并注明。悬停雷达图显示原始值。共管账户标「共管」，其收入与规模均按 1/N（N=经理数）平分计入每位经理。管理规模 = 策略表「账户规模（亿元）」合计（共管平分；不在策略表的账户不计入；策略表为空时回退持仓最新规模），隐含费率分母同口径。贡献收入 = 投顾费全状态计入（成交确认/审批通过/审批中），且按维表全账户口径（含已到期、不在策略表中的账户），收入区间筛选联动雷达收入维、对比表与账户清单。月均换手率 = 名下账户换手率的户均简单平均（策略表∩流水重合账户取六信号口径月均换手率，无流水账户计 0）。今年以来平均收益率 = 名下账户今年以来收益率的户均简单平均（无值不计入，并剔除观察时点距开始运作不足 3 个月的账户），附收益率区间。收入效率：隐含费率 = 区间收入(万) ÷ 管理规模(亿)，月均收入 = 区间收入 ÷ 区间费用覆盖月数。</p>
+    <p style="color:#64748b;font-size:13px;margin-bottom:12px">账户池 = 账户策略及业绩表（截面存续账户，含不在流水/持仓中的账户；该表无数据时回退 IAM 维表），经理归属经 IAM 维表项目编号匹配。部门分开比较：分位 = 部门内小于他的人数 ÷ (部门人数−1) × 100；部门不足 5 人时按全体分位并注明。悬停雷达图显示原始值。共管账户标「共管」，其收入与规模均按 1/N（N=经理数）平分计入每位经理。管理规模 = 策略表「账户规模（亿元）」合计（共管平分；不在策略表的账户不计入；策略表为空时回退持仓最新规模），隐含费率分母同口径。贡献收入 = 投顾费全状态计入（成交确认/审批通过/审批中），且按维表全账户口径（含已到期、不在策略表中的账户），收入区间筛选联动雷达收入维、对比表与账户清单。月均换手率 = 名下账户换手率的户均简单平均（策略表∩流水重合账户取六信号口径月均换手率，无流水账户计 0）。今年以来平均收益率 = 名下账户今年以来收益率的户均简单平均（无值不计入；剔除观察时点距开始运作不足 3 个月、以及收益率超过 10% 的异常账户），附收益率区间。收入效率：隐含费率 = 区间收入(万) ÷ 管理规模(亿)，月均收入 = 区间收入 ÷ 区间费用覆盖月数。</p>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
       <span style="font-size:13px;color:#64748b">部门：</span>
       <select id="mgrLine" onchange="onMgrLine(this.value)" style="padding:6px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
@@ -2755,7 +2775,7 @@ function refreshManagerPanel(){
       const d=dim[c]||{};
       const dd=det[c]||{};
       const co=d.managers&&d.managers.length>1?` <span class="badge badge-amber">共管:${d.managers.filter(x=>x!==m.name).join('、')}</span>`:'';
-      const ryCell=dd.retYtd!=null?dd.retYtd+'%'+(dd.ryExcluded?'<span class="badge badge-amber" title="观察时点距开始运作不足3个月，未计入经理平均">未满3月</span>':''):'-';
+      const ryCell=dd.retYtd!=null?dd.retYtd+'%'+(dd.ryExcluded?`<span class="badge badge-amber" title="未计入经理平均">${dd.ryExclReason||'剔除'}</span>`:''):'-';
       return{
         cells:[`<a href="javascript:void(0)" onclick="jumpToProfile('${c}')"><span class="font-mono">${c}</span></a>`,(d.sacName||'-')+co,d.group||'-',d.clientType||'-',d.fundSource||'-',dd.traded?'✓':'<span style="color:#94a3b8">无交易</span>',dd.scale||'-',dd.income||0,dd.turnover!=null?dd.turnover:0,dd.winRate!=null?dd.winRate+'%':'-',ryCell,(dd.cat1||'')+(dd.cat2?'/'+dd.cat2:'')||'-'],
         vals:[c,d.sacName||'',d.group||'',d.clientType||'',d.fundSource||'',dd.traded?1:0,dd.scale||0,dd.income||0,dd.turnover||0,dd.winRate!=null?dd.winRate:-1,dd.retYtd!=null?dd.retYtd:-999,(dd.cat1||'')+(dd.cat2||'')]
@@ -3085,13 +3105,15 @@ function initStoryTab(r){
 const exportState={dept:'all',date:'',dataKey:null};
 const EXPORT_METRICS=[
   {name:'管理账户数（个）',note:'账户策略及业绩表存续账户口径，共管各计'},
-  {name:'管理账户规模（亿元）',note:'账户策略及业绩表「账户规模（亿元）」合计，共管按1/N平分；策略表无数据时回退持仓最新规模'},
+  {name:'管理账户规模（亿元）',note:'账户策略及业绩表「账户规模（亿元）」合计，共管按1/N平分'},
   {name:'管理账户今年以来的投顾费收入（元）',note:'投顾费表全部月份计入（含2025年划转账户的费用，均视为本年收入），全状态（成交确认/审批通过/审批中），全账户口径含已到期账户，共管按1/N分摊'},
-  {name:'账户收益率平均值（%）',note:'今年以来收益率户均简单平均，剔除观察时点距开始运作不足3个月的账户'},
+  {name:'账户收益率平均值（%）',note:'今年以来收益率户均简单平均，剔除观察时点距开始运作不足3个月及收益率超过10%的账户'},
   {name:'账户收益率最小值（%）',note:'同上口径的最小值'},
   {name:'账户收益率最大值（%）',note:'同上口径的最大值'},
   {name:'涉及策略',note:'策略表二级分类去重列举'},
-  {name:'涉及客户类型',note:'项目基础信息表委托人类型去重列举'}
+  {name:'涉及客户类型',note:'项目基础信息表委托人类型去重列举'},
+  {name:'规模前三委托人',note:'按策略表「委托人/渠道」字段加总名下存续账户规模（共管按1/N平分）取前三，单位亿元'},
+  {name:'收入前三委托人',note:'按投顾费表「投顾委托人」字段加总投顾费（全部月份全状态，全账户口径含已到期账户，共管按1/N分摊）取前三，单位元'}
 ];
 function buildExportRows(dept,dateStr){
   const r=currentResult;
@@ -3112,7 +3134,9 @@ function buildExportRows(dept,dateStr){
     }
     const stratList=[...new Set(m.accounts.map(c=>strat[c]&&strat[c].cat2).filter(x=>x))].join('；');
     const clientList=[...new Set(m.accounts.map(c=>dim[c]&&dim[c].clientType).filter(x=>x))].join('；');
-    const vals=[m.acctCount,m.scale,Math.round(ytd*100)/100,m.retYtd!=null?m.retYtd:'',m.retYtdMin!=null?m.retYtdMin:'',m.retYtdMax!=null?m.retYtdMax:'',stratList,clientList];
+    const scaleTop3=(m.topClientScale||[]).map(x=>`${x.name}（${x.val}亿）`).join('；');
+    const incTop3=(m.topClientInc||[]).map(x=>`${x.name}（${x.val.toLocaleString()}元）`).join('；');
+    const vals=[m.acctCount,m.scale,Math.round(ytd*100)/100,m.retYtd!=null?m.retYtd:'',m.retYtdMin!=null?m.retYtdMin:'',m.retYtdMax!=null?m.retYtdMax:'',stratList,clientList,scaleTop3,incTop3];
     const e=emp[m.name]||null;
     EXPORT_METRICS.forEach((mt,i)=>{
       rows.push([dateStr,m.line,e?e.post:'',e?e.jobNo:'',m.name,mt.name,vals[i],mt.note]);
@@ -3134,7 +3158,7 @@ function renderExportTab(r){
   if(exportState.dataKey!==dk){exportState.dataKey=dk;exportState.date=dk}
   if(!exportState.date&&maxD)exportState.date=fmtDate(maxD);
   return`<div class="card"><div class="card-header"><div class="card-title">报表输出 · 经理指标长表（匹配输出模板格式）</div></div><div class="card-body">
-    <p style="color:#64748b;font-size:13px;margin-bottom:12px">每位经理输出 8 行指标（统计日期/二级部门/岗位/工号/姓名/指标/值/指标说明）。岗位与工号由槽位⑤上传的「员工工号对照表」（表头含工号+姓名）按姓名自动匹配，未上传或未匹配到时留空。口径与「投资经理」页一致：账户池=策略业绩表存续账户；规模=策略表账户规模、共管 1/N 平分；收入=投顾费表全部月份全状态全账户、共管 1/N 分摊（2025 年划转账户的费用也计入，视为本年收入；与经理页「贡献收入」默认口径一致，若经理页筛过收入区间则会对不上）；收益率剔除运作不足 3 个月账户。下方表格每页 20 行，可翻页查看全量。</p>
+    <p style="color:#64748b;font-size:13px;margin-bottom:12px">每位经理输出 10 行指标（统计日期/二级部门/岗位/工号/姓名/指标/值/指标说明）。岗位与工号由槽位⑤上传的「员工工号对照表」（表头含工号+姓名）按姓名自动匹配，未上传或未匹配到时留空。口径与「投资经理」页一致：账户池=策略业绩表存续账户；规模=策略表账户规模、共管 1/N 平分；收入=投顾费表全部月份全状态全账户、共管 1/N 分摊（2025 年划转账户的费用也计入，视为本年收入；与经理页「贡献收入」默认口径一致，若经理页筛过收入区间则会对不上）；收益率剔除运作不足 3 个月及收益率超过 10% 的账户。下方表格每页 20 行，可翻页查看全量。</p>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
       <span style="font-size:13px;color:#64748b">部门：</span>
       <select id="exportDept" onchange="onExportFilter()" style="padding:6px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
@@ -3159,7 +3183,7 @@ function renderExportPreview(){
   if(!box)return;
   const rows=buildExportRows(exportState.dept,exportState.date);
   const meta=document.getElementById('exportMeta');
-  if(meta)meta.textContent=`共 ${Math.max(0,rows.length-1)} 行（${Math.max(0,Math.floor((rows.length-1)/8))} 位经理 × 8 项指标），每页 20 行可翻页`;
+  if(meta)meta.textContent=`共 ${Math.max(0,rows.length-1)} 行（${Math.max(0,Math.floor((rows.length-1)/10))} 位经理 × 10 项指标），每页 20 行可翻页`;
   box.innerHTML=renderPaginatedTable('exportRows',rows[0],rows.slice(1).map(r=>r.map(v=>v==null?'':v)));
 }
 function downloadMgrExport(){
