@@ -3082,7 +3082,7 @@ function initStoryTab(r){
 }
 
 // ===== 批次5：报表输出页（经理指标长表，匹配《输出模板.xlsx》格式）=====
-const exportState={dept:'all',date:''};
+const exportState={dept:'all',date:'',dataKey:null};
 const EXPORT_METRICS=[
   {name:'管理账户数（个）',note:'账户策略及业绩表存续账户口径，共管各计'},
   {name:'管理账户规模（亿元）',note:'账户策略及业绩表「账户规模（亿元）」合计，共管按1/N平分；策略表无数据时回退持仓最新规模'},
@@ -3100,7 +3100,9 @@ function buildExportRows(dept,dateStr){
   const dim=r.acctDim?r.acctDim.dim:{};
   const strat=r.acctDim?r.acctDim.strat:{};
   const emp=r.acctDim&&r.acctDim.empByName?r.acctDim.empByName:{};
-  const year=dateStr?dateStr.slice(0,4):'';
+  // 统计年份：统计日期所在年；未选日期时回退为投顾费最新月份所在年（保证"今年以来"口径不为全量）
+  let year=dateStr?dateStr.slice(0,4):'';
+  if(!year){const fm=mg.feeMonths||[];year=fm.length?fm[fm.length-1].slice(0,4):''}
   const rows=[['统计日期','二级部门','岗位','工号','姓名','指标','值','指标说明']];
   const mgrs=mg.mgrs.filter(x=>(dept==='all'||x.line===dept)&&x.acctCount>0); // 无管理账户的经理不输出
   for(const m of mgrs){
@@ -3126,14 +3128,16 @@ function renderExportTab(r){
   if(!mg||!mg.hasData){
     return`<div class="card"><div class="card-header"><div class="card-title">报表输出</div></div><div class="card-body"><div class="empty-state">本页需要槽位⑤「账户信息/投顾费」数据（IAM 维表 + 投顾费表，可选叠加策略业绩表、员工工号对照表）</div></div></div>`;
   }
-  // 默认统计日期 = 数据期最大日期
+  // 默认统计日期 = 数据期最大日期；数据变化（重新分析）时重置默认日期，避免沿用旧数据的日期
   let maxD=null;
   for(const x of r._store.pos){if(x._date&&(!maxD||x._date>maxD))maxD=x._date}
   for(const x of r._store.zq){if(x._date&&(!maxD||x._date>maxD))maxD=x._date}
   for(const x of r._store.hg){if(x._date&&(!maxD||x._date>maxD))maxD=x._date}
+  const dk=maxD?fmtDate(maxD):'';
+  if(exportState.dataKey!==dk){exportState.dataKey=dk;exportState.date=dk}
   if(!exportState.date&&maxD)exportState.date=fmtDate(maxD);
   return`<div class="card"><div class="card-header"><div class="card-title">报表输出 · 经理指标长表（匹配输出模板格式）</div></div><div class="card-body">
-    <p style="color:#64748b;font-size:13px;margin-bottom:12px">每位经理输出 8 行指标（统计日期/二级部门/岗位/工号/姓名/指标/值/指标说明）。岗位与工号由槽位⑤上传的「员工工号对照表」（表头含工号+姓名）按姓名自动匹配，未上传或未匹配到时留空。口径与「投资经理」页一致：账户池=策略业绩表存续账户；规模=策略表账户规模、共管 1/N 平分；收入=今年以来投顾费全状态全账户、共管 1/N 分摊；收益率剔除运作不足 3 个月账户。下方表格每页 20 行，可翻页查看全量。</p>
+    <p style="color:#64748b;font-size:13px;margin-bottom:12px">每位经理输出 8 行指标（统计日期/二级部门/岗位/工号/姓名/指标/值/指标说明）。岗位与工号由槽位⑤上传的「员工工号对照表」（表头含工号+姓名）按姓名自动匹配，未上传或未匹配到时留空。口径与「投资经理」页一致：账户池=策略业绩表存续账户；规模=策略表账户规模、共管 1/N 平分；收入=投顾费全状态全账户、共管 1/N 分摊；收益率剔除运作不足 3 个月账户。<strong style="color:#b45309">注意：本页收入为「今年以来」（统计日期所在年，单位元），与经理页「贡献收入」（默认全部月份、单位万元，且受收入区间筛选影响）时间窗不同，两者不一致属正常。</strong>下方表格每页 20 行，可翻页查看全量。</p>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
       <span style="font-size:13px;color:#64748b">部门：</span>
       <select id="exportDept" onchange="onExportFilter()" style="padding:6px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
