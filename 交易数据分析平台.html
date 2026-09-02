@@ -490,8 +490,7 @@ function buildManagerAnalysis(acctDim,activeCodes,dfPosClean,dfZqTrade,fifo,ddMa
       scale+=sz*shareOf(c); // 共管规模也按 1/N 平分（策略表口径）
       const st=strat[c];
       if(st&&st.cat2)stratSet.add(st.cat2);
-      if(d.clientType)clientSet.add('T:'+d.clientType);
-      if(d.fundSource)clientSet.add('S:'+d.fundSource);
+      if(d.clientType)clientSet.add(d.clientType); // 客群丰富度：仅按委托人类型去重（策略表存续账户口径）
       // 月均换手率：策略表∩流水重合账户取六信号口径月均换手率（当月买卖额÷当月日均规模的各月平均）；无流水/算不出默认 0；经理=户均简单平均
       const tov=idMap&&idMap[c]&&idMap[c].turnover!=null?idMap[c].turnover:0;
       toSum+=tov;
