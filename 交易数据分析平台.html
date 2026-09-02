@@ -2400,7 +2400,7 @@ function runAnalysis(rawHg,rawZq,rawPos,hdStart,hdEnd,salesDropped,acctInfo){
     fifo,identity,holdingsAnalysis,
     dataQuality:dq.dqReport,leverage,valuation,lifecycle,
     inputInfo:{salesDropped:salesDropped||0,unmapped:classResult.unmapped,unmappedCodes:classResult.unmappedCodes,hdStartLabel:hdStart.label,hdEndLabel:hdEnd.label,hdStartDate:hdStart.dateStr,hdEndDate:hdEnd.dateStr,acctInfo:dimMatchStats},
-    acctDim:acctDim?{dim:acctDim.dim,strat:acctDim.strat}:null,
+    acctDim:acctDim?{dim:acctDim.dim,strat:acctDim.strat,empByName:acctDim.empByName||{}}:null,
     manager,
     _store:{hg:dfHgClean,zq:dfZqTrade,zqAll:dfZqClean,pos:dfPosClean,hdEnd:hdEnd}
   };
@@ -2599,8 +2599,8 @@ function renderManagerTab(r){
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
       <span style="font-size:13px;color:#64748b">部门：</span>
       <select id="mgrLine" onchange="onMgrLine(this.value)" style="padding:6px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
-        <option value="投资顾问部">投资顾问部（${mg.mgrs.filter(x=>x.line==='投资顾问部').length} 位经理）</option>
-        <option value="财富产品部">财富产品部（${mg.mgrs.filter(x=>x.line==='财富产品部').length} 位经理）</option>
+        <option value="投资顾问部">投资顾问部（${mg.mgrs.filter(x=>x.line==='投资顾问部'&&x.acctCount>0).length} 位经理）</option>
+        <option value="财富产品部">财富产品部（${mg.mgrs.filter(x=>x.line==='财富产品部'&&x.acctCount>0).length} 位经理）</option>
       </select>
       <span style="font-size:13px;color:#64748b">经理：</span>
       <select id="mgrName" onchange="onMgrSelect(this.value)" style="padding:6px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;min-width:160px"></select>
@@ -2628,7 +2628,7 @@ function renderManagerTab(r){
 function mgrPool(line){
   const mg=currentResult&&currentResult.manager;
   if(!mg)return[];
-  return mg.mgrs.filter(x=>x.line===line);
+  return mg.mgrs.filter(x=>x.line===line&&x.acctCount>0); // 无管理账户（策略表口径）的经理不展示
 }
 function onMgrLine(line){
   managerState.line=line;
@@ -3103,7 +3103,7 @@ function buildExportRows(dept,dateStr){
   const emp=r.acctDim&&r.acctDim.empByName?r.acctDim.empByName:{};
   const year=dateStr?dateStr.slice(0,4):'';
   const rows=[['统计日期','二级部门','岗位','工号','姓名','指标','值','指标说明']];
-  const mgrs=mg.mgrs.filter(x=>dept==='all'||x.line===dept);
+  const mgrs=mg.mgrs.filter(x=>(dept==='all'||x.line===dept)&&x.acctCount>0); // 无管理账户的经理不输出
   for(const m of mgrs){
     // 今年以来投顾费（元）：统计日期所在年、分摊后、全账户
     let ytd=0;
