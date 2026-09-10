@@ -135,6 +135,7 @@ function getMonthKey(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padSt
 function fmtDate(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function parseTerm(s){if(!s)return null;s=String(s).trim();let m=s.match(/^(\d+)年以上$/);if(m)return parseFloat(m[1])+5;m=s.match(/^(\d+)[\-~](\d+)年$/);if(m)return(parseFloat(m[1])+parseFloat(m[2]))/2;m=s.match(/^(\d+(?:\.\d+)?)年$/);if(m)return parseFloat(m[1]);m=s.match(/^(\d+(?:\.\d+)?)月$/);if(m)return parseFloat(m[1])/12;m=s.match(/^(\d+(?:\.\d+)?)[日天]$/);if(m)return parseFloat(m[1])/365;return null}
 function getTermBucket(term){if(term==null)return'未知';if(term<1)return'0-1年';if(term<3)return'1-3年';if(term<5)return'3-5年';if(term<9)return'5-9年';if(term<30)return'9-30年';return'30年+'}
+function mktGroup(m){m=toStr(m);if(!m)return'';if(m.includes('银行间')||m.includes('中债')||m.includes('上清'))return'IB';if(m.includes('上交')||m.includes('深交')||m.includes('交易所')||m.includes('中证'))return'EX';return'OT'}
 function getSizeBucket(size){const yi=1e8;if(size<yi)return'<1亿';if(size<5*yi)return'1-5亿';if(size<20*yi)return'5-20亿';if(size<50*yi)return'20-50亿';if(size<100*yi)return'50-100亿';return'100亿+'}
 function extractMainCode(raw){return toStr(raw).split('-')[0].trim()}
 function findDateField(row){const fields=['交易日期','日期','成交日期','交割日期','结算日期','Date','日期.1','报告生成日期'];for(const f of fields){if(row[f]!=null){const d=parseDate(row[f]);if(d)return d}}for(const[k,v]of Object.entries(row)){if(/日期|date/i.test(k)){const d=parseDate(v);if(d)return d}}return null}
@@ -319,7 +320,7 @@ function parseHoldingsWb(wb,label){
     }else if(name.includes('非标')||name.includes('基金')){
       for(const r of rows){const acct=toStr(r['证券账户代码']),code=toStr(r['基金代码']);if(!acct&&!code)continue;out.funds.push({acct,code,name:toStr(r['基金名称']),kind:toStr(r['基金种类']),assetType:toStr(r['资产类型']),face:toNum(r['持仓面额(万元)']),mv:toNum(r['市值(万元)']),floatPnl:toNum(r['浮动盈亏(万元)']),realPnl:toNum(r['已实现盈亏(万元)'])})}
     }else{
-      for(const r of rows){const acct=toStr(r['证券账户代码']),code=toStr(r['债券代码']);if(!acct&&!code)continue;out.bonds.push({acct,code,name:toStr(r['债券名称']),bondType:toStr(r['债券类型']),assetType:toStr(r['资产类型']),rateClass:toStr(r['利率分类']),face:toNum(r['持仓面额(万元)']),mv:toNum(r['市值(万元)']),costFull:toNum(r['每百元全价成本(元)']),remain:toNum(r['剩余期限(年)']),dorm:toNum(r['休眠天数']),floatPnl:toNum(r['浮动盈亏(万元)']),realPnl:toNum(r['已实现盈亏(万元)'])})}
+      for(const r of rows){const acct=toStr(r['证券账户代码']),code=toStr(r['债券代码']);if(!acct&&!code)continue;out.bonds.push({acct,code,name:toStr(r['债券名称']),bondType:toStr(r['债券类型']),assetType:toStr(r['资产类型']),market:toStr(r['市场类型']),rateClass:toStr(r['利率分类']),face:toNum(r['持仓面额(万元)']),mv:toNum(r['市值(万元)']),costFull:toNum(r['每百元全价成本(元)']),remain:toNum(r['剩余期限(年)']),dorm:toNum(r['休眠天数']),floatPnl:toNum(r['浮动盈亏(万元)']),realPnl:toNum(r['已实现盈亏(万元)'])})}
     }
   }
   return out;
@@ -580,8 +581,8 @@ function buildClassMap(hd){
     else if(RATE_TYPES.has(t)){cat='利率债'}
     else if(t){cat='信用债'}
     if(!cat)continue;
-    const rec={cat,group,bondType:t};
-    if(b.code&&!bondByCode.has(b.code))bondByCode.set(b.code,rec);
+    const rec={cat,group,bondType:t,mkt:mktGroup(b.market)};
+    if(b.code){const arr=bondByCode.get(b.code)||[];if(!arr.some(x=>x.mkt===rec.mkt))arr.push(rec);bondByCode.set(b.code,arr)}
     if(b.name&&!bondByName.has(b.name))bondByName.set(b.name,rec);
   }
   for(const f of hd.funds){
@@ -598,10 +599,13 @@ function applyClassification(dfZq,cm){
   for(const r of dfZq){
     const v=toStr(r._variety),b=toStr(r._biz),code=toStr(r['代码']),nm=toStr(r._name2);
     if(v.includes('期货')||b.includes('期货')||/^(TL|TF|TS|T)\d/.test(code)){r._class='期货';continue}
-    // ① 期末持仓明细精准映射（债券代码 → 债券名称兜底）
-    const hit=cm.bondByCode.get(code)||cm.bondByName.get(nm);
+    // ① 期末持仓明细精准映射（债券代码 → 债券名称兜底）；同码跨市场时用托管/交易市场消歧
     const fundCls=cm.fundMap.get(code);
-    if(fundCls){r._class=fundCls;continue}
+    if(fundCls&&(v.includes('基金')||b.includes('基金'))){r._class=fundCls;continue} // 基金映射仅在基金类交易生效，避免同码债券被误截胡
+    let hit=null;
+    const cands=cm.bondByCode.get(code);
+    if(cands)hit=cands.length===1?cands[0]:(cands.find(x=>x.mkt===mktGroup(r._mkt))||cands[0]);
+    if(!hit)hit=cm.bondByName.get(nm);
     if(hit){
       r._class=hit.group||hit.cat;
       if(!toStr(r._bondType)&&hit.bondType)r._bondType=hit.bondType;
@@ -624,7 +628,7 @@ function applyClassification(dfZq,cm){
 }
 
 function preprocessHg(records){return records.map(r=>{const date=findDateField(r);return{...r,_code:toStr(r['内部证券账户代码']),_name:toStr(r['内部证券账户名称']),_biz:toStr(r['业务品种']),_variety:toStr(r['交易品种']),_dir:toStr(r['交易方向']),_name2:toStr(r['名称']),_amount:toNum(r['交易金额(元)']),_amountYi:toNum(r['交易金额(元)'])/1e8,_date:date,_dateStr:date?fmtDate(date):null,_month:date?getMonthKey(date):null,_termStr:'',_term:null,_termBucket:''}})}
-function preprocessZq(records){return records.map(r=>{const date=findDateField(r);const termStr=toStr(r['期限'])||toStr(r['期限.1']);const term=parseTerm(termStr);return{...r,_code:toStr(r['内部证券账户代码']),_name:toStr(r['内部证券账户名称']),_biz:toStr(r['业务品种']),_variety:toStr(r['交易品种']),_dir:toStr(r['交易方向']),_cat:toStr(r['债券类别']),_bondType:toStr(r['债券品种']),_name2:toStr(r['名称']),_termStr:termStr,_term:term,_termBucket:getTermBucket(term),_amount:toNum(r['交易金额(元)']),_amountYi:toNum(r['交易金额(元)'])/1e8,_date:date,_dateStr:date?fmtDate(date):null,_month:date?getMonthKey(date):null}})}
+function preprocessZq(records){return records.map(r=>{const date=findDateField(r);const termStr=toStr(r['期限'])||toStr(r['期限.1']);const term=parseTerm(termStr);return{...r,_code:toStr(r['内部证券账户代码']),_name:toStr(r['内部证券账户名称']),_biz:toStr(r['业务品种']),_variety:toStr(r['交易品种']),_dir:toStr(r['交易方向']),_cat:toStr(r['债券类别']),_bondType:toStr(r['债券品种']),_name2:toStr(r['名称']),_mkt:toStr(r['托管市场'])||toStr(r['交易市场']),_termStr:termStr,_term:term,_termBucket:getTermBucket(term),_amount:toNum(r['交易金额(元)']),_amountYi:toNum(r['交易金额(元)'])/1e8,_date:date,_dateStr:date?fmtDate(date):null,_month:date?getMonthKey(date):null}})}
 function preprocessPosition(records){return records.map(r=>{const rawCode=toStr(r['账户编号']);const code=extractMainCode(rawCode);const date=findDateField(r);return{...r,_code:code,_nameSAC:toStr(r['账户名称SAC']),_belong:toStr(r['账户归属']),_size:toNum(r['账户规模(元)']),_total:toNum(r['资产总值(元)']),_nav:toNum(r['累计单位净值'])||null,_date:date,_dateStr:date?fmtDate(date):null}})}
 
 function fillPositionGaps(dfPos){
