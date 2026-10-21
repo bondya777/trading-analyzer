@@ -2,6 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.sheetjs.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; font-src 'self' data:; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'; worker-src 'self' blob:">
 <title>交易数据分析平台</title>
 <script src="https://cdn.sheetjs.com/xlsx-0.18.5/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
@@ -84,6 +86,15 @@ th .th-sort:hover{color:#1d4ed8}
 #startBtn.ready{background:linear-gradient(135deg,#3b82f6 0%,#1d4ed8 100%);color:white;cursor:pointer}
 #mgrCompareWrap table th,#mgrCompareWrap table td{text-align:center!important}
 @media(max-width:768px){.container{padding:12px}.stats-grid{grid-template-columns:repeat(2,1fr)}.grid-2{grid-template-columns:1fr}.tabs{gap:2px}.tab{padding:8px 12px;font-size:12px}}
+.note-panel{background:#fff;border:1px solid #bfdbfe;border-left:4px solid #3b82f6;border-radius:10px;padding:16px 18px;margin:12px 0}
+.note-heading{font-weight:600;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.note-version{font-size:11px;color:#94a3b8;font-weight:400;margin-left:auto}
+.note-scope{font-size:12px;color:#64748b;margin:6px 0 10px}.note-prose{font-size:14px;color:#334155;line-height:1.95;overflow-wrap:anywhere}
+.note-evidence{border:0;background:#eff6ff;color:#2563eb;border-radius:4px;padding:1px 6px;margin:0 5px;font-size:11px;cursor:pointer;vertical-align:baseline;white-space:nowrap}.note-evidence:hover{background:#dbeafe}.note-evidence:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
+.note-month{border-top:1px solid #e2e8f0;margin-top:10px;padding-top:10px;font-size:13px;color:#475569}.note-quality{font-size:12px;color:#92400e;margin-top:8px}.note-quality ul{margin:6px 0 0 18px}
+.note-month-details{font-size:13px;margin-top:8px;color:#475569}.note-month-details>summary{color:#2563eb;cursor:pointer}.note-month-details p{margin-top:9px;line-height:1.9}.note-warning{font-size:12px;color:#92400e;padding:8px 0}
+.note-overlay{position:fixed;inset:0;background:rgba(15,23,42,.48);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px}.note-dialog{background:white;border-radius:12px;width:min(1150px,96vw);max-height:92vh;overflow:hidden;box-shadow:0 20px 60px #0f172a40;display:flex;flex-direction:column}.note-dialog-head{padding:14px 20px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center}.note-dialog-head button,.note-dialog .pager button{padding:5px 10px;border:1px solid #cbd5e1;border-radius:5px;background:white;cursor:pointer;margin-left:5px}.note-dialog-body{overflow:auto;padding:18px 20px}.note-dialog td{font-size:12px;max-width:340px;overflow-wrap:anywhere}.note-dialog th{font-size:12px}.note-record-search{width:100%;padding:9px 12px;border:1px solid #cbd5e1;border-radius:6px;margin:14px 0 8px}.note-story-card .detail-header{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+@media(max-width:768px){.note-panel{padding:12px}.note-overlay{padding:6px}.note-dialog{max-height:96vh;width:100%}.note-dialog-body{padding:12px}.note-prose{font-size:13px}}
+
 </style>
 </head>
 <body>
@@ -130,6 +141,8 @@ th .th-sort:hover{color:#1d4ed8}
 function toNum(v){if(typeof v==='number')return v;if(typeof v==='string'){const n=parseFloat(v.replace(/,/g,''));return isNaN(n)?0:n}return 0}
 function minMaxTime(dates){let mn=Infinity,mx=-Infinity;for(const d of dates){if(!d)continue;const t=d.getTime();if(t<mn)mn=t;if(t>mx)mx=t}return mn===Infinity?[null,null]:[mn,mx]}
 function toStr(v){if(v==null)return'';return String(v).trim()}
+function importSource(file,sheet,row){return{file:toStr(file),sheet:toStr(sheet),row:Number.isInteger(row)?row:null}}
+function sourceRows(ws,file,sheet){return XLSX.utils.sheet_to_json(ws,{defval:null}).map(r=>({...r,_source:importSource(file,sheet,Number.isInteger(r.__rowNum__)?r.__rowNum__+1:null)}))}
 function parseDate(v){if(v instanceof Date&&!isNaN(v.getTime()))return v;if(typeof v==='number'){const epoch=new Date(Date.UTC(1899,11,30));return new Date(epoch.getTime()+v*86400000)}if(typeof v==='string'){const d=new Date(v);if(!isNaN(d.getTime()))return d;if(/^\d{8}$/.test(v))return new Date(parseInt(v.slice(0,4)),parseInt(v.slice(4,6))-1,parseInt(v.slice(6,8)))}return null}
 function getMonthKey(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
 function fmtDate(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
@@ -184,7 +197,8 @@ function nearestScale(scaleMap,code,date){
 function applyDataQuality(dfHg,dfZq,dfPos){
   const mk=id=>{const rule=DQ_RULES.find(x=>x.id===id);return{rule:id,level:rule.level,text:rule.text,rows:[]}};
   const bR0=mk('R0'),bR1=mk('R1'),bR1w=mk('R1w'),bR2=mk('R2'),bR3=mk('R3'),bR5=mk('R5'),bR9=mk('R9'),bR6=mk('R6'),bR7=mk('R7');
-  const addRow=(b,r,detail)=>{if(b.rows.length<5000)b.rows.push({date:r._date?fmtDate(r._date):(r._dateStr||''),code:toStr(r._code),name:toStr(r._name)||toStr(r._nameSAC)||toStr(r._code),variety:toStr(r._biz)||toStr(r._variety)||'持仓',detail,amount:r._amount!=null?Math.round(r._amount/1e8*10000)/10000:null})};
+  const narrativeRows=[];
+  const addRow=(b,r,detail)=>{narrativeRows.push({rule:b.rule,level:b.level,row:r,detail});if(b.rows.length<5000)b.rows.push({date:r._date?fmtDate(r._date):(r._dateStr||''),code:toStr(r._code),name:toStr(r._name)||toStr(r._nameSAC)||toStr(r._code),variety:toStr(r._biz)||toStr(r._variety)||'持仓',detail,amount:r._amount!=null?Math.round(r._amount/1e8*10000)/10000:null})};
   const scaleMap=buildScaleLookup(dfPos);
   // --- 回购表 ---
   const hgClean=[];
@@ -255,23 +269,24 @@ function applyDataQuality(dfHg,dfZq,dfPos){
     posClean.push(r);
   }
   const dqReport=[bR0,bR1,bR2,bR3,bR5,bR6,bR7,bR1w,bR9].filter(b=>b.rows.length>0);
-  return{hgClean,zqClean,posClean,dqReport,levRedAccounts,scaleMap};
+  return{hgClean,zqClean,posClean,dqReport,levRedAccounts,scaleMap,narrativeRows};
 }
 
 // ===== 多文件解析套件 =====
-const FLOW_KEEP=['交易编号','交易状态','交易品种','业务品种','交易日期','交易方向','簿记场所','托管市场','代码','名称','交易面额(万)','交易金额(元)','期限','交易员','到期收益率(%)','全价(元)','内部证券账户名称','内部证券账户代码','中债估值偏移度(%)','清算所估值偏移度(%)','中证估值偏移度(%)'];
+const FLOW_KEEP=['交易编号','交易状态','交易品种','业务品种','交易日期','交易方向','簿记场所','托管市场','代码','名称','交易面额(万)','交易金额(元)','期限','交易员','到期收益率(%)','全价(元)','内部证券账户名称','内部证券账户代码','中债估值偏移度(%)','清算所估值偏移度(%)','中证估值偏移度(%)','交易时间','成交时间'];
 function readWb(file){return new Promise((res,rej)=>{const reader=new FileReader();reader.onload=e=>res(XLSX.read(new Uint8Array(e.target.result),{type:'array'}));reader.onerror=()=>rej(new Error('文件读取失败: '+file.name));reader.readAsArrayBuffer(file)})}
 
 // 交易流水：自动识别原始格式（双行表头/110列）与旧精简格式；拆分为回购/债券；剔除销售户；宽表裁剪列
-function parseFlowWb(wb){
+function parseFlowWb(wb,fname){
   const out={hgRaw:[],zqRaw:[],posRaw:[],salesDropped:0};
   for(const name of wb.SheetNames){
     const ws=wb.Sheets[name];
     if(name.includes('持仓')||name.includes('规模')){
-      out.posRaw=XLSX.utils.sheet_to_json(ws,{defval:null});
+      out.posRaw=sourceRows(ws,fname,name);
       continue;
     }
-    const aoa=XLSX.utils.sheet_to_json(ws,{header:1,blankrows:false,defval:null});
+    const sheetStartRow=XLSX.utils.decode_range(ws['!ref']||'A1').s.r;
+    const aoa=XLSX.utils.sheet_to_json(ws,{header:1,blankrows:true,defval:null});
     if(aoa.length<2)continue;
     const r1=(aoa[0]||[]).map(x=>String(x||'').trim());
     const isGroup=r1.some(x=>['组合信息','交易要素','首期交易要素','基本交易要素'].includes(x));
@@ -280,7 +295,8 @@ function parseFlowWb(wb){
     const idx={};headers.forEach((h,i)=>{if(h&&idx[h]==null)idx[h]=i});
     const wide=headers.length>40;
     const sheetHint=name.includes('回购')?'hg':(name.includes('债券')||name.includes('其他'))?'zq':null;
-    for(const arr of dataRows){
+    for(let dataIndex=0;dataIndex<dataRows.length;dataIndex++){
+      const arr=dataRows[dataIndex]||[];if(!arr.some(v=>v!=null&&v!==''))continue;
       let o;
       if(wide){
         o={};
@@ -288,6 +304,7 @@ function parseFlowWb(wb){
       }else{
         o={};for(const h of headers){const i=idx[h];if(h&&arr[i]!=null&&arr[i]!=='')o[h]=arr[i]}
       }
+      o._source=importSource(fname,name,sheetStartRow+dataIndex+(isGroup?3:2));
       const nm=String(o['内部证券账户名称']||'');
       if(nm.includes('销售户')){out.salesDropped++;continue}
       const v=String(o['交易品种']||'');
@@ -300,9 +317,9 @@ function parseFlowWb(wb){
   return out;
 }
 
-function parsePosWb(wb){
+function parsePosWb(wb,fname){
   for(const name of wb.SheetNames){
-    const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{defval:null});
+    const rows=sourceRows(wb.Sheets[name],fname,name);
     if(rows.length>0&&rows[0]['账户编号']!=null)return rows;
   }
   return[];
@@ -312,15 +329,15 @@ function parsePosWb(wb){
 function parseHoldingsWb(wb,label){
   const out={bonds:[],funds:[],futures:[],label,dateStr:''};
   for(const name of wb.SheetNames){
-    const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{defval:null});
+    const rows=sourceRows(wb.Sheets[name],label,name);
     const m=name.match(/(\d{1,2}\.\d{1,2})/);
     if(m&&!out.dateStr)out.dateStr=m[1];
     if(name.includes('期货')){
-      for(const r of rows){const acct=toStr(r['证券账户代码']);if(!acct)continue;out.futures.push({acct,contract:toStr(r['合约代码']),dir:toStr(r['多空头标志']),qty:toNum(r['交易数量(手)']),costNonDaily:toNum(r['持仓成本_非逐日(万元)']),margin:toNum(r['保证金占用(万元)']),floatPnl:toNum(r['浮动盈亏_非逐日(万元)']),realPnl:toNum(r['已实现盈亏_非逐日(万元)'])})}
+      for(const r of rows){const acct=toStr(r['证券账户代码']);if(!acct)continue;out.futures.push({acct,contract:toStr(r['合约代码']),dir:toStr(r['多空头标志']),qty:toNum(r['交易数量(手)']),costNonDaily:toNum(r['持仓成本_非逐日(万元)']),margin:toNum(r['保证金占用(万元)']),floatPnl:toNum(r['浮动盈亏_非逐日(万元)']),realPnl:toNum(r['已实现盈亏_非逐日(万元)']),_source:r._source})}
     }else if(name.includes('非标')||name.includes('基金')){
-      for(const r of rows){const acct=toStr(r['证券账户代码']),code=toStr(r['基金代码']);if(!acct&&!code)continue;out.funds.push({acct,code,name:toStr(r['基金名称']),kind:toStr(r['基金种类']),assetType:toStr(r['资产类型']),face:toNum(r['持仓面额(万元)']),mv:toNum(r['市值(万元)']),floatPnl:toNum(r['浮动盈亏(万元)']),realPnl:toNum(r['已实现盈亏(万元)'])})}
+      for(const r of rows){const acct=toStr(r['证券账户代码']),code=toStr(r['基金代码']);if(!acct&&!code)continue;out.funds.push({acct,code,name:toStr(r['基金名称']),market:toStr(r['市场类型']),kind:toStr(r['基金种类']),assetType:toStr(r['资产类型']),face:toNum(r['持仓面额(万元)']),mv:toNum(r['市值(万元)']),floatPnl:toNum(r['浮动盈亏(万元)']),realPnl:toNum(r['已实现盈亏(万元)']),_source:r._source})}
     }else{
-      for(const r of rows){const acct=toStr(r['证券账户代码']),code=toStr(r['债券代码']);if(!acct&&!code)continue;out.bonds.push({acct,code,name:toStr(r['债券名称']),bondType:toStr(r['债券类型']),assetType:toStr(r['资产类型']),market:toStr(r['市场类型']),rateClass:toStr(r['利率分类']),face:toNum(r['持仓面额(万元)']),mv:toNum(r['市值(万元)']),costFull:toNum(r['每百元全价成本(元)']),remain:toNum(r['剩余期限(年)']),dorm:toNum(r['休眠天数']),floatPnl:toNum(r['浮动盈亏(万元)']),realPnl:toNum(r['已实现盈亏(万元)'])})}
+      for(const r of rows){const acct=toStr(r['证券账户代码']),code=toStr(r['债券代码']);if(!acct&&!code)continue;out.bonds.push({acct,code,name:toStr(r['债券名称']),bondType:toStr(r['债券类型']),assetType:toStr(r['资产类型']),market:toStr(r['市场类型']),rateClass:toStr(r['利率分类']),face:toNum(r['持仓面额(万元)']),mv:toNum(r['市值(万元)']),costFull:toNum(r['每百元全价成本(元)']),remain:toNum(r['剩余期限(年)']),remainKnown:r['剩余期限(年)']!=null&&r['剩余期限(年)']!=='',rating:toStr(r['中债隐含评级']),dorm:toNum(r['休眠天数']),floatPnl:toNum(r['浮动盈亏(万元)']),realPnl:toNum(r['已实现盈亏(万元)']),_source:r._source})}
     }
   }
   return out;
@@ -329,7 +346,7 @@ function parseHoldingsWb(wb,label){
 // ===== 批次2：槽位⑤ 账户信息/投顾费 解析（按表头特征自动识别五类表）=====
 // 识别特征：静态收益率→账户策略及业绩；费用类别→投顾费；所属组别/中心→IAM投顾；投资组别→IAM财富；工号+姓名→员工工号对照表
 const ACCTINFO_KEEP={
-  strategy:['项目编号','SAC账户名称','一级分类','二级分类','明细','业绩基准','委托人/渠道','账户规模（亿元）','债券规模（亿元）','成立以来收益率','今年以来收益率','静态收益率','基点（万元）','资产久期','杠杆率'],
+  strategy:['账户起始运作日期','项目编号','SAC账户名称','一级分类','二级分类','明细','业绩基准','委托人/渠道','账户规模（亿元）','债券规模（亿元）','成立以来收益率','今年以来收益率','静态收益率','基点（万元）','资产久期','杠杆率'],
   fees:['交易状态','投顾账户编号','收付款日期','费用(元)','费用类别','投顾委托人','提交审核人','业务审核人'],
   iamTg:['项目编号','SAC账户名称','资金来源','所属组别/中心','所属策略组','投顾投资经理','投顾投资助理','量化投资经理','是否2026重点业务','项目委托人','委托人部门或分行','委托人类型','项目起始运作日','合同到期日','银行间债券估值方法','交易所债券估值方法','业绩基准(%)'],
   iamCf:['项目编号','SAC账户名称','资金来源','投资组别','投顾投资经理','投顾投资助理','委托人(代销渠道)','委托人部门或分行','委托人类型','项目起始运作日','合同到期日','业绩基准(%)'],
@@ -349,7 +366,8 @@ function parseAcctInfoWb(wb,fname){
   const out={strategy:[],fees:[],iamTg:[],iamCf:[],emp:[],found:[]};
   for(const name of wb.SheetNames){
     const ws=wb.Sheets[name];
-    const aoa=XLSX.utils.sheet_to_json(ws,{header:1,blankrows:false,defval:null});
+    const sheetStartRow=XLSX.utils.decode_range(ws['!ref']||'A1').s.r;
+    const aoa=XLSX.utils.sheet_to_json(ws,{header:1,blankrows:true,defval:null});
     if(!aoa.length)continue;
     const headers=(aoa[0]||[]).map(h=>String(h||'').trim());
     const type=detectAcctInfoType(headers);
@@ -359,13 +377,13 @@ function parseAcctInfoWb(wb,fname){
     const codeKey=type==='fees'?'投顾账户编号':(type==='emp'?'姓名':'项目编号');
     let n=0;
     for(let i=1;i<aoa.length;i++){
-      const arr=aoa[i];
+      const arr=aoa[i]||[];if(!arr.some(v=>v!=null&&v!==''))continue;
       const code=toStr(arr[idx[codeKey]]);
       // 投顾费允许无账户编号的行（如指数授权费），其余四类必须有主键（项目编号/姓名）
       if(!code&&type!=='fees')continue;
       const o={};
       for(const k of keep){const j=idx[k];if(j!=null&&arr[j]!=null&&arr[j]!=='')o[k]=arr[j]}
-      out[type].push(o);n++;
+      o._source=importSource(fname,name,sheetStartRow+i+1);out[type].push(o);n++;
     }
     if(type)out.found.push({type,label:ACCTINFO_LABEL[type],rows:n,file:fname||''}); // 识别到类型即留痕（含 0 行空表）
   }
@@ -384,19 +402,19 @@ function buildAcctDim(acctInfo){
     const code=toStr(r['项目编号']);if(!code)continue;
     const g1=toStr(r['所属组别/中心']),g2=toStr(r['所属策略组']);
     const mgrs=[...splitManagers(r['投顾投资经理']),...splitManagers(r['量化投资经理'])];
-    dim[code]={code,line:'投资顾问部',sacName:toStr(r['SAC账户名称']),group1:g1,group2:g2,group:g1+(g2?' / '+g2:''),managers:[...new Set(mgrs)],assistant:toStr(r['投顾投资助理']),key2026:toStr(r['是否2026重点业务']),client:toStr(r['项目委托人']),clientDept:toStr(r['委托人部门或分行']),clientType:toStr(r['委托人类型']),fundSource:toStr(r['资金来源']),startDate:fmtDateOrNull(r['项目起始运作日']),endDate:fmtDateOrNull(r['合同到期日']),bench:toNumOrNull(r['业绩基准(%)']),valMethod:[toStr(r['银行间债券估值方法']),toStr(r['交易所债券估值方法'])].filter(x=>x).join('/')||''};
+    dim[code]={code,source:r._source,line:'投资顾问部',sacName:toStr(r['SAC账户名称']),group1:g1,group2:g2,group:g1+(g2?' / '+g2:''),managers:[...new Set(mgrs)],assistant:toStr(r['投顾投资助理']),key2026:toStr(r['是否2026重点业务']),client:toStr(r['项目委托人']),clientDept:toStr(r['委托人部门或分行']),clientType:toStr(r['委托人类型']),fundSource:toStr(r['资金来源']),startDate:fmtDateOrNull(r['项目起始运作日']),endDate:fmtDateOrNull(r['合同到期日']),bench:toNumOrNull(r['业绩基准(%)']),valMethod:[toStr(r['银行间债券估值方法']),toStr(r['交易所债券估值方法'])].filter(x=>x).join('/')||''};
   }
   for(const r of acctInfo.iamCf){
     const code=toStr(r['项目编号']);if(!code)continue;
     if(dim[code])continue; // 两表并存：投顾线优先（实测主键不重叠，防御性保留）
     const g1=toStr(r['投资组别']);
-    dim[code]={code,line:'财富产品部',sacName:toStr(r['SAC账户名称']),group1:g1,group2:'',group:g1,managers:[...new Set(splitManagers(r['投顾投资经理']))],assistant:toStr(r['投顾投资助理']),key2026:'',client:toStr(r['委托人(代销渠道)']),clientDept:toStr(r['委托人部门或分行']),clientType:toStr(r['委托人类型']),fundSource:toStr(r['资金来源']),startDate:fmtDateOrNull(r['项目起始运作日']),endDate:fmtDateOrNull(r['合同到期日']),bench:toNumOrNull(r['业绩基准(%)']),valMethod:''};
+    dim[code]={code,source:r._source,line:'财富产品部',sacName:toStr(r['SAC账户名称']),group1:g1,group2:'',group:g1,managers:[...new Set(splitManagers(r['投顾投资经理']))],assistant:toStr(r['投顾投资助理']),key2026:'',client:toStr(r['委托人(代销渠道)']),clientDept:toStr(r['委托人部门或分行']),clientType:toStr(r['委托人类型']),fundSource:toStr(r['资金来源']),startDate:fmtDateOrNull(r['项目起始运作日']),endDate:fmtDateOrNull(r['合同到期日']),bench:toNumOrNull(r['业绩基准(%)']),valMethod:''};
   }
   // 策略业绩表：策略分类权威源（一级/二级分类）
   const strat={};
   for(const r of acctInfo.strategy){
     const code=toStr(r['项目编号']);if(!code)continue;
-    strat[code]={code,cat1:toStr(r['一级分类']),cat2:toStr(r['二级分类']),detail:toStr(r['明细']),bench:toNumOrNull(r['业绩基准']),clientCh:toStr(r['委托人/渠道']),size:toNumOrNull(r['账户规模（亿元）']),retSince:toNumOrNull(r['成立以来收益率']),retYtd:toNumOrNull(r['今年以来收益率']),retStatic:toNumOrNull(r['静态收益率']),dv01:toNumOrNull(r['基点（万元）']),duration:toNumOrNull(r['资产久期']),lev:toNumOrNull(r['杠杆率']),sacName:toStr(r['SAC账户名称'])};
+    strat[code]={code,startDate:fmtDateOrNull(r['账户起始运作日期']),source:r._source,cat1:toStr(r['一级分类']),cat2:toStr(r['二级分类']),detail:toStr(r['明细']),bench:toNumOrNull(r['业绩基准']),clientCh:toStr(r['委托人/渠道']),size:toNumOrNull(r['账户规模（亿元）']),retSince:toNumOrNull(r['成立以来收益率']),retYtd:toNumOrNull(r['今年以来收益率']),retStatic:toNumOrNull(r['静态收益率']),dv01:toNumOrNull(r['基点（万元）']),duration:toNumOrNull(r['资产久期']),lev:toNumOrNull(r['杠杆率']),sacName:toStr(r['SAC账户名称'])};
   }
   // 投顾费：收入口径=全部交易状态（成交确认/审批通过/审批中均计入）
   const feeRows=[];const feeByCode={};let feeTotalAll=0,feeConfirmed=0;
@@ -2240,10 +2258,11 @@ function refreshProfileTable(){
   const el=document.getElementById('profileTableWrap');
   if(el)el.innerHTML=profileTableHtml();
   updateTagFilterCount(profileRows(profileState.month).length);
+  refreshAccountNarrative();
 }
 
 
-function runAnalysis(rawHg,rawZq,rawPos,hdStart,hdEnd,salesDropped,acctInfo){
+function runAnalysisCore(rawHg,rawZq,rawPos,hdStart,hdEnd,salesDropped,acctInfo){
   const dfHg=preprocessHg(rawHg);
   const dfZq=preprocessZq(rawZq);
   const dfPos=preprocessPosition(rawPos);
@@ -2425,13 +2444,294 @@ function runAnalysis(rawHg,rawZq,rawPos,hdStart,hdEnd,salesDropped,acctInfo){
     inputInfo:{salesDropped:salesDropped||0,unmapped:classResult.unmapped,unmappedCodes:classResult.unmappedCodes,hdStartLabel:hdStart.label,hdEndLabel:hdEnd.label,hdStartDate:hdStart.dateStr,hdEndDate:hdEnd.dateStr,acctInfo:dimMatchStats},
     acctDim:acctDim?{dim:acctDim.dim,strat:acctDim.strat,empByName:acctDim.empByName||{}}:null,
     manager,
-    _store:{hg:dfHgClean,zq:dfZqTrade,zqAll:dfZqClean,pos:dfPosClean,hdEnd:hdEnd}
+    _narrativeQuality:dq.narrativeRows,
+    _store:{hg:dfHgClean,zq:dfZqTrade,zqAll:dfZqClean,pos:dfPosClean,hdStart:hdStart,hdEnd:hdEnd}
   };
 }
 
 
 let currentResult=null;let chartInstances={};
 
+// ACCOUNT_NARRATIVE_BEGIN
+// All facts and reports below are computed in page memory from the current imports.
+const AccountNarrative = (() => {
+  'use strict';
+  const VERSION = '2026.10.22.1';
+  const RULES = Object.freeze({main:.60,pairMain:.80,pairMinimum:.20,minor:.10,concentrated:.70,smallAmount:.05,manyCount:.20,smallMedianWan:100,minManyCount:10});
+  const STANDARD = new Set(['现券买卖','基金买卖','国债期货']);
+  const BUY = new Set(['买入','分销买入','期货买入']);
+  const SELL = new Set(['卖出','分销卖出','期货卖出']);
+  const RATE = new Set(['国债','地方政府债','特种金融债']);
+  const ABS = new Set(['专项受益凭证','资产支持票据','资产支持证券','持有型不动产ABS']);
+  const str = x => x == null ? '' : String(x).trim();
+  const num = x => { const v = typeof x === 'number' ? x : parseFloat(str(x).replace(/,/g,'')); return Number.isFinite(v) ? v : 0; };
+  const sum = (a, fn) => a.reduce((s,x)=>s+fn(x),0);
+  const ratio = (a,b) => b>0?a/b:0;
+  const pct = (a,b) => {const p=ratio(a,b)*100;return p>0&&p<1?'不足1':p>99&&p<100?(p>=99.95?'接近100':p.toFixed(1)):Math.round(p);};
+  const smallPercent = p => p>0&&p<.1?'不足0.1%':`${p.toFixed(1)}%`;
+  const median = a => { if(!a.length)return null;const b=a.slice().sort((x,y)=>x-y),m=Math.floor(b.length/2);return b.length%2?b[m]:(b[m-1]+b[m])/2; };
+  const unique = a => [...new Set(a)];
+  const market = x => {const s=str(x);if(/银行间|中债|上清|清算所/.test(s))return'IB';if(/上交|上海/.test(s))return'SH';if(/深交|深圳/.test(s))return'SZ';if(/交易所|中证/.test(s))return'EX';return s||'?';};
+  const day = x => {if(!x)return'';if(typeof x==='number'){const d=new Date(Date.UTC(1899,11,30)+x*86400000);return Number.isNaN(+d)?'':d.toISOString().slice(0,10);}if(x instanceof Date){return Number.isNaN(+x)?'':`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;}const s=str(x);const m=s.match(/^(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})/);if(m)return`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;return/^\d{8}$/.test(s)?`${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`:'';};
+  const daysBetween = (a,b) => Math.round((Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/86400000);
+  const dateLabel = s => s?`${Number(s.slice(0,4))}年${Number(s.slice(5,7))}月${Number(s.slice(8,10))}日`:'';
+  const monthLabel = s => s?`${Number(s.slice(0,4))}年${Number(s.slice(5,7))}月`:'';
+  const prevMonth = s => {const d=new Date(Date.UTC(Number(s.slice(0,4)),Number(s.slice(5,7))-2,1));return d.toISOString().slice(0,7);};
+  const amount = yi => Math.abs(yi)<.1?`${(yi*1e4).toFixed(2)}万元`:`${yi.toFixed(2)}亿元`;
+  const source = r => r._source||r.__source||r.raw?.__source||null;
+  const clock = (r,d) => {for(const v of [r['成交时间'],r['交易时间']]){const s=str(v),m=s.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);if(m&&(day(s)===d||!day(s)&&/^\d{1,2}:/.test(s)))return `${m[1].padStart(2,'0')}:${m[2]}:${m[3]||'00'}`;}return'';};
+  const category = r => {const c=str(r._class||r.category);if(c)return c==='可转债'?'转债':c;if(/期货/.test(str(r._variety||r['交易品种'])))return'期货';if(/基金/.test(str(r._variety||r['交易品种'])))return'基金';return['信用债','利率债'].includes(str(r._cat))?str(r._cat):'其他';};
+  const holdingCategory = (h,kind) => {if(kind==='funds')return h.kind==='REITs'?'REITs':/ETF|基金/.test(str(h.kind))?'基金':'其他';if(h.assetType==='资产证券化产品'||ABS.has(h.bondType))return'ABS';if(['可转债','可交换债'].includes(h.bondType))return'转债';return RATE.has(h.bondType)?'利率债':h.bondType?'信用债':'其他';};
+  const theme = name => {const s=str(name);for(const [re,label]of [[/科创债/,'科创债类'],[/城投债/,'城投债类'],[/可转债|转债/,'转债类'],[/公司债/,'公司债类'],[/信用债/,'信用债类'],[/短融|短债/,'短债类'],[/国债/,'国债类'],[/政金债|政策性金融债|国开债/,'政金债类'],[/红利/,'红利类'],[/黄金/,'黄金类'],[/半导体|芯片/,'半导体类'],[/医药|医疗/,'医药类'],[/沪深300|中证500|中证1000|A500|上证50|科创50|创业板指/,'宽基股票类'],[/恒生|港股/,'港股类']])if(re.test(s))return label;return'其他主题';};
+  function flowTerm(raw,fallback){const s=str(raw);let m=s.match(/^(\d+(?:\.\d+)?)[-~—至](\d+(?:\.\d+)?)年/);if(m)return{min:Number(m[1]),max:Number(m[2]),source:'流水期限'};m=s.match(/^(\d+(?:\.\d+)?)年/);if(m)return{min:/以内|以下/.test(s)?0:Number(m[1]),max:/以上|\+/.test(s)?Infinity:Number(m[1]),source:'流水期限'};m=s.match(/^(\d+(?:\.\d+)?)[月]/);if(m)return{min:Number(m[1])/12,max:Number(m[1])/12,source:'流水期限'};m=s.match(/^(\d+(?:\.\d+)?)[日天]/);if(m)return{min:Number(m[1])/365,max:Number(m[1])/365,source:'流水期限'};return fallback>0?{min:fallback,max:fallback,source:'本次期末剩余期限映射'}:null;}
+  function termConcentration(items){const total=sum(items,h=>h.yi);for(const [label,test]of [['0—1年',t=>t>=0&&t<1],['1—3年',t=>t>=1&&t<3],['3—5年',t=>t>=3&&t<5],['5—7年',t=>t>=5&&t<7],['7年以上',t=>t>=7],['0—3年',t=>t>=0&&t<3],['0—5年',t=>t>=0&&t<5]]){const value=sum(items.filter(h=>h.remain!=null&&h.remain>0&&test(h.remain)),h=>h.yi);if(ratio(value,total)>=RULES.concentrated)return{label,value,share:ratio(value,total)};}return null;}
+  const rating = r => {const s=str(r);return s==='AA(2)'||s==='AA（2）'?'AA':s&&s!=='无'?s:'未知';};
+  function groups(rows,key,weight){const m=new Map();for(const r of rows){const k=key(r)||'未知';m.set(k,(m.get(k)||0)+weight(r));}return[...m].map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value);}
+  function classifyTop(g,total){if(!g.length||total<=0)return[];if(g[0].value/total>=RULES.main)return[g[0]];if(g.length>1&&g[0].value/total>=RULES.pairMinimum&&g[1].value/total>=RULES.pairMinimum&&(g[0].value+g[1].value)/total>=RULES.pairMain)return g.slice(0,2);return[];}
+  function snapshotDate(label,year){const s=str(label);if(day(s))return day(s);const m=s.match(/(?:^|\D)(\d{1,2})[.月/-](\d{1,2})(?:日|\D|$)/);return m&&year?`${year}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`:'';}
+  function build(store,dimensions={},options={}){
+    const idx={version:VERSION,accounts:new Map(),records:new Map(),cache:new Map(),periodStart:'',periodEnd:'',startDate:'',endDate:'',options};
+    const account = code => {code=str(code);if(!code)return null;if(!idx.accounts.has(code))idx.accounts.set(code,{code,name:code,flows:[],repo:[],positions:[],start:[],end:[],futures:[],quality:[],pairing:null,meta:{}});return idx.accounts.get(code);};
+    let seq=0;
+    const register = r => {r.id='n'+(++seq);idx.records.set(r.id,r);return r;};
+    for(const r of store.zqAll||store.zq||[]){const a=account(r._code||r['内部证券账户代码']);if(!a)continue;const d=day(r._dateStr||r._date||r['交易日期']);const f=register({kind:'flow',acct:a.code,tradeId:str(r['交易编号']),date:d,time:clock(r,d),code:str(r['代码']),name:str(r._name2||r['名称']),market:str(r._mkt||r['托管市场']||r['交易市场']),variety:str(r._variety||r['交易品种']),biz:str(r._biz||r['业务品种']),direction:str(r._dir||r['交易方向']),category:category(r),yi:r._amountYi!=null?num(r._amountYi):num(r['交易金额(元)'])/1e8,qty:num(r['交易面额(万)']),term:flowTerm(r['期限'],r._term),source:source(r)});f.key=f.code+'|'+market(f.market);f.standard=STANDARD.has(f.variety);a.flows.push(f);if(r._name||r['内部证券账户名称'])a.name=str(r._name||r['内部证券账户名称']);}
+    for(const r of store.hg||[]){const a=account(r._code);if(!a)continue;const f=register({kind:'flow',acct:a.code,tradeId:str(r['交易编号']),date:day(r._dateStr||r._date),code:str(r['代码']),name:str(r._name2||r['名称']),market:str(r._mkt||r['托管市场']),variety:'质押式回购',biz:str(r._biz),direction:str(r._dir),category:'回购',yi:num(r._amountYi),qty:num(r['交易面额(万)']),source:source(r)});a.repo.push(f);if(r._name)a.name=str(r._name);}
+    for(const r of store.pos||[]){const a=account(r._code);if(!a)continue;const p=register({kind:'scale',acct:a.code,date:day(r._dateStr||r._date),sizeYi:num(r._size)/1e8,assetsYi:num(r._total)/1e8,nav:r._nav==null?null:num(r._nav),source:source(r)});if(p.date)a.positions.push(p);if(a.name===a.code&&r._nameSAC)a.name=str(r._nameSAC);}
+    const dates=[...idx.records.values()].map(r=>r.date).filter(Boolean).sort();idx.periodStart=dates[0]||'';idx.periodEnd=dates.at(-1)||'';
+    const year=idx.periodEnd.slice(0,4);idx.endDate=snapshotDate(store.hdEnd?.dateStr,year);idx.startDate=snapshotDate(store.hdStart?.dateStr,year);if(idx.startDate&&idx.endDate&&idx.startDate>idx.endDate)idx.startDate=(Number(year)-1)+idx.startDate.slice(4);
+    for(const [which,hd]of [['start',store.hdStart],['end',store.hdEnd]]){
+      for(const kind of ['bonds','funds'])for(const h of hd?.[kind]||[]){const a=account(h.acct);if(!a)continue;const r=register({kind:'holding',snapshot:which,acct:a.code,date:which==='end'?idx.endDate:idx.startDate,code:str(h.code),name:str(h.name),market:str(h.market),category:holdingCategory(h,kind),yi:num(h.mv)/1e4,qty:num(h.face),remain:h.remainKnown===false||h.remain==null?null:num(h.remain),rating:rating(h.rating),source:source(h)});r.key=r.code+'|'+market(r.market);a[which].push(r);}
+      for(const h of hd?.futures||[]){const a=account(h.acct);if(a&&which==='end'&&(num(h.qty)||num(h.margin)))a.futures.push(register({kind:'future',acct:a.code,date:idx.endDate,code:str(h.contract),name:str(h.contract),direction:str(h.dir),qty:num(h.qty),marginWan:num(h.margin),source:source(h)}));}
+    }
+    for(const [code,s]of Object.entries(dimensions.strat||{})){const a=account(code);a.meta.strategy=s;const start=day(s.startDate);if(start){a.meta.startDate=start;a.meta.startSource='账户策略表';a.meta.startRecord=register({kind:'info',acct:code,date:start,code,name:s.sacName||code,variety:'账户策略表',value:dateLabel(start),source:s.source||s._source||null});}if(s.sacName)a.name=str(s.sacName);}
+    for(const [code,d]of Object.entries(dimensions.dim||{})){const a=account(code);a.meta.dimension=d;if(!a.meta.startDate&&day(d.startDate)){a.meta.startDate=day(d.startDate);a.meta.startSource='IAM基础信息';a.meta.startRecord=register({kind:'info',acct:code,date:a.meta.startDate,code,name:d.sacName||code,variety:'IAM基础信息',value:dateLabel(a.meta.startDate),source:d.source||d._source||null});}if(a.name===code&&d.sacName)a.name=str(d.sacName);}
+    for(const q of options.quality||[]){const row=q.row||q;const a=account(row._code||q.code);if(!a)continue;const rec=register({kind:'quality',acct:a.code,tradeId:str(row['交易编号']),date:day(row._dateStr||row._date||q.date),code:str(row['代码']),name:str(row._name2||row['名称']),variety:str(row._variety||q.variety),direction:str(row._dir),yi:row._amountYi!=null?num(row._amountYi):num(q.amount),rule:q.rule,level:q.level,detail:q.detail,source:source(row)||q.source||null});a.quality.push(rec);}
+    for(const a of idx.accounts.values()){
+      a.positions.sort((x,y)=>x.date.localeCompare(y.date));
+      const ids=new Map();for(const f of a.flows){if(f.tradeId)ids.set(f.tradeId,(ids.get(f.tradeId)||0)+1);}a.duplicates=[...ids].filter(([,n])=>n>1).length;
+      a.months=unique([...a.flows,...a.repo,...a.positions].map(r=>r.date.slice(0,7)).filter(Boolean)).sort();
+      if(!a.months.length&&a.end.length&&idx.endDate)a.months=[idx.endDate.slice(0,7)];
+      if(a.months.length&&idx.periodStart&&idx.periodEnd){
+        let first=a.months[0];if(a.start.length)first=idx.periodStart.slice(0,7);if(a.meta.startDate&&a.meta.startDate.slice(0,7)>first)first=a.meta.startDate.slice(0,7);
+        const last=a.end.length?idx.periodEnd.slice(0,7):a.months.at(-1),filled=[];
+        for(let m=first;m&&m<=last&&filled.length<240;){filled.push(m);const d=new Date(Date.UTC(Number(m.slice(0,4)),Number(m.slice(5,7)),1));m=d.toISOString().slice(0,7);}
+        if(filled.length&&filled.length<240)a.months=unique([...a.months,...filled]).sort();
+      }
+    }
+    return idx;
+  }
+  function holdings(a,idx){
+    const merged=new Map();for(const r of a.end){if(!merged.has(r.key))merged.set(r.key,{...r,yi:0,qty:0,ids:[],ratings:new Set()});const h=merged.get(r.key);h.yi+=r.yi;h.qty+=r.qty;h.ids.push(r.id);h.ratings.add(r.rating);}
+    const items=[...merged.values()];for(const h of items)if(h.ratings.size>1)h.rating='未知';
+    const positive=items.filter(h=>h.yi>1e-10),negative=items.filter(h=>h.yi< -1e-10),total=sum(items,h=>h.yi),positiveTotal=sum(positive,h=>h.yi),cats=groups(positive,h=>h.category,h=>h.yi);
+    const last=a.positions.at(-1);const balanceMismatch=!!(last&&idx.endDate===last.date&&last.assetsYi>0&&total>last.assetsYi*1.1);
+    const valid=negative.length===0&&!balanceMismatch&&total>0;
+    const credits=positive.filter(h=>h.category==='信用债'),creditTotal=sum(credits,h=>h.yi),rates=groups(credits,h=>h.rating,h=>h.yi);
+    let rateNames=[];if(rates[0]&&rates[0].name!=='未知'&&ratio(rates[0].value,creditTotal)>=RULES.concentrated)rateNames=[rates[0].name];else{const known=rates.filter(x=>x.name!=='未知').slice(0,2);if(known.length===2&&ratio(sum(known,x=>x.value),creditTotal)>=RULES.concentrated)rateNames=known.map(x=>x.name);}
+    const ranges=[['0—1年',t=>t>=0&&t<1],['1—3年',t=>t>=1&&t<3],['3—5年',t=>t>=3&&t<5],['5—7年',t=>t>=5&&t<7],['7年以上',t=>t>=7],['0—3年',t=>t>=0&&t<3],['0—5年',t=>t>=0&&t<5]];
+    let term=null;for(const [label,test]of ranges){const value=sum(credits.filter(h=>h.remain!=null&&h.remain>0&&test(h.remain)),h=>h.yi);if(ratio(value,creditTotal)>=RULES.concentrated){term={label,value,share:ratio(value,creditTotal)};break;}}
+    const funds=positive.filter(h=>h.category==='基金'),fundTotal=sum(funds,h=>h.yi),themes=groups(funds,h=>theme(h.name),h=>h.yi);
+    const fundLabel=funds.length&&funds.every(h=>/ETF/i.test(h.name))?(funds.every(h=>/债|短融/.test(h.name))?'债券ETF':'ETF'):'基金';
+    return{items,positive,negative,total,positiveTotal,cats,main:classifyTop(cats,positiveTotal),valid,balanceMismatch,credits,creditTotal,rates,rateNames,term,rateTerm:termConcentration(positive.filter(h=>h.category==='利率债')),funds,fundTotal,themes,fundLabel};
+  }
+  function pairing(a,idx){
+    if(a.pairing)return a.pairing;
+    const queues=new Map(),result=new Map(),dayGroups=new Map();
+    for(const f of a.flows){if(!f.date||!f.code||f.category==='期货')continue;const k=f.key+'|'+f.date;if(!dayGroups.has(k))dayGroups.set(k,[]);dayGroups.get(k).push(f);}
+    const ambiguous=new Set([...dayGroups].filter(([,r])=>r.some(x=>BUY.has(x.direction))&&r.some(x=>SELL.has(x.direction))&&r.some(x=>!x.time)).map(([k])=>k));
+    const addLot=(key,lot)=>{if(!queues.has(key))queues.set(key,{lots:[],head:0});queues.get(key).lots.push(lot);};
+    for(const h of a.start){if(h.qty>0)addLot(h.key,{qty:h.qty,date:null,origin:'opening',recordId:h.id});}
+    const ordered=a.flows.filter(f=>f.date&&f.code&&f.qty>0&&f.category!=='期货').slice().sort((x,y)=>{
+      const d=x.date.localeCompare(y.date);if(d)return d;
+      if(x.key===y.key&&ambiguous.has(x.key+'|'+x.date)){const s=(SELL.has(x.direction)?0:1)-(SELL.has(y.direction)?0:1);if(s)return s;}
+      return(x.time||'').localeCompare(y.time||'')||x.id.localeCompare(y.id);
+    });
+    for(const f of ordered){
+      // The opening snapshot is authoritative for its date; do not double-enter that day's inventory.
+      if(idx.startDate&&f.date<=idx.startDate)continue;
+      if(BUY.has(f.direction)){addLot(f.key,{qty:f.qty,date:f.date,origin:f.direction==='分销买入'?'primary':'secondary',time:f.time,recordId:f.id});continue;}
+      const selling=SELL.has(f.direction),withdraw=/回售|兑付|赎回/.test(f.direction+' '+f.variety);
+      if(!selling&&!withdraw)continue;
+      const q=queues.get(f.key)||{lots:[],head:0};let left=f.qty;
+      const p={saleId:f.id,date:f.date,category:f.category,qty:f.qty,primary:0,opening:0,secondary:0,short:0,oneTwo:0,sameDay:0,unmatched:0,knownDaysWeight:0,sourceIds:[]};
+      while(left>1e-8&&q.head<q.lots.length){const lot=q.lots[q.head],take=Math.min(left,lot.qty);left-=take;lot.qty-=take;p[lot.origin]+=take;if(take>0&&lot.recordId)p.sourceIds.push(lot.recordId);if(lot.origin==='secondary'&&lot.date){const days=daysBetween(lot.date,f.date);if(days>=0){p.knownDaysWeight+=days*take;if(days<=20)p.short+=take;if(days>=1&&days<=2)p.oneTwo+=take;if(days===0&&lot.time&&f.time&&lot.time<=f.time&&!ambiguous.has(f.key+'|'+f.date))p.sameDay+=take;}}if(lot.qty<=1e-8)q.head++;}
+      p.unmatched=left;if(selling)result.set(f.id,p);
+    }
+    a.pairing=result;return result;
+  }
+  function statistics(a,idx,month){
+    const inScope=r=>!month||r.date.slice(0,7)===month,flows=a.flows.filter(inScope),trades=flows.filter(r=>r.standard),repo=a.repo.filter(inScope),pairs=pairing(a,idx);
+    const total=sum(trades,r=>r.yi),buy=sum(trades.filter(r=>BUY.has(r.direction)),r=>r.yi),sell=sum(trades.filter(r=>SELL.has(r.direction)),r=>r.yi);
+    const categories=unique(trades.map(r=>r.category)).map(name=>{
+      const rows=trades.filter(r=>r.category===name),bySecurity=new Map();for(const r of rows){if(!bySecurity.has(r.key))bySecurity.set(r.key,[]);bySecurity.get(r.key).push(r);}
+      const twoWay=[...bySecurity.values()].filter(g=>g.some(r=>BUY.has(r.direction))&&g.some(r=>SELL.has(r.direction)));
+      const dateGroups=new Map();for(const r of rows){const k=r.key+'|'+r.date;if(!dateGroups.has(k))dateGroups.set(k,[]);dateGroups.get(k).push(r);}
+      const sameDay=[...dateGroups.values()].filter(g=>g.some(r=>BUY.has(r.direction))&&g.some(r=>SELL.has(r.direction))),sellThenBuy=sameDay.filter(g=>g.some(s=>SELL.has(s.direction)&&s.time&&g.some(b=>BUY.has(b.direction)&&b.time&&s.time<b.time)));
+      const sells=rows.filter(r=>SELL.has(r.direction));let shortYi=0,knownYi=0,oneTwoYi=0,sameDayYi=0,primaryYi=0,openingYi=0,unmatchedYi=0,pairedSales=0;
+      for(const r of sells){const p=pairs.get(r.id);if(!p||!r.qty){unmatchedYi+=r.yi;continue;}shortYi+=r.yi*p.short/r.qty;knownYi+=r.yi*p.secondary/r.qty;oneTwoYi+=r.yi*p.oneTwo/r.qty;sameDayYi+=r.yi*p.sameDay/r.qty;primaryYi+=r.yi*p.primary/r.qty;openingYi+=r.yi*p.opening/r.qty;unmatchedYi+=r.yi*p.unmatched/r.qty;if(p.secondary>0)pairedSales++;}
+      const amountYi=sum(rows,r=>r.yi),sellYi=sum(sells,r=>r.yi),buyYi=sum(rows.filter(r=>BUY.has(r.direction)),r=>r.yi),days=unique(rows.map(r=>r.date).filter(Boolean)).length;
+      return{name,rows,amountYi,share:ratio(amountYi,total),count:rows.length,countShare:ratio(rows.length,trades.length),buyYi,sellYi,netYi:buyYi-sellYi,securities:bySecurity.size,days,medianWan:median(rows.map(r=>r.yi*1e4)),twoWayShare:ratio(sum(twoWay.flat(),r=>r.yi),amountYi),longShare:ratio(sum(rows.filter(r=>r.term&&r.term.min>=7),r=>r.yi),amountYi),sameDayPairs:sameDay.length,sameDayDates:unique(sameDay.map(g=>g[0].date)).length,sellThenBuy:sellThenBuy.length,shortYi,knownYi,oneTwoYi,sameDayYi,primaryYi,openingYi,unmatchedYi,pairedSales,rolling:!a.duplicates&&days>=3&&rows.length>=6&&twoWay.length>=1&&(ratio(shortYi,sellYi)>=.6&&pairedSales>=3||twoWay.length>=2&&ratio(sum(twoWay.flat(),r=>r.yi),amountYi)>=.6),smallMany:rows.length>=RULES.minManyCount&&days>=3&&ratio(amountYi,total)<=RULES.smallAmount&&ratio(rows.length,trades.length)>=RULES.manyCount&&(median(rows.map(r=>r.yi*1e4))||Infinity)<=RULES.smallMedianWan};
+    }).sort((x,y)=>y.amountYi-x.amountYi);
+    const primary=flows.filter(r=>r.direction==='分销买入'),bondBuys=flows.filter(r=>BUY.has(r.direction)&&!['基金','REITs','期货'].includes(r.category)),bondSells=trades.filter(r=>SELL.has(r.direction)&&!['基金','REITs','期货'].includes(r.category));
+    let matchedPrimary=0;for(const r of bondSells){const p=pairs.get(r.id);if(p&&r.qty>0)matchedPrimary+=r.yi*p.primary/r.qty;}
+    const primaryYi=sum(primary,r=>r.yi),primaryShare=ratio(primaryYi,sum(bondBuys,r=>r.yi)),primarySellShare=ratio(matchedPrimary,sum(bondSells,r=>r.yi));
+    const positions=a.positions.filter(inScope),last=positions.at(-1)||null,prior=month?a.positions.filter(r=>r.date.slice(0,7)===prevMonth(month)).at(-1)||null:null;
+    return{month,flows,trades,repo,total,buy,sell,categories,main:classifyTop(categories.map(x=>({name:x.name,value:x.amountYi})),total),primary,primaryYi,primaryShare,primarySellShare,matchedPrimary,bondSellYi:sum(bondSells,r=>r.yi),primaryDominant:primaryYi>0&&primaryShare>=.6&&primarySellShare>=.3&&!a.duplicates,last,prior,positions,quality:a.quality.filter(inScope)};
+  }
+  function feature(key,text,metrics,rows,priority=50){return{key,text,metrics,recordIds:unique(rows.flatMap(r=>r.ids||r.id?[...(r.ids||[r.id])]:[])),priority};}
+  function sourceRecords(a,idx,rows){const pairs=pairing(a,idx),ids=unique(rows.flatMap(r=>pairs.get(r.id)?.sourceIds||[]));return rows.concat(ids.map(id=>idx.records.get(id)).filter(Boolean));}
+  function holdingFeature(a,idx,h){
+    if(!h.positive.length)return null;
+    const main=h.main.length?h.main:h.cats.slice(0,2),names=main.map(x=>x.name),mainText=names.join('和');let text='';
+    if(names.length===1&&names[0]==='基金'&&h.valid){
+      text=`主要持有${h.fundLabel}${amount(h.fundTotal)}`;const ts=h.themes.filter(t=>t.name!=='其他主题').slice(0,2);if(ts.length&&ratio(sum(ts,t=>t.value),h.fundTotal)>=.7)text+=`，其中${ts.map(t=>`${t.name}约占${pct(t.value,h.fundTotal)}%`).join('、')}`;text+='。';
+    }else{
+      text=h.main.length?`持仓以${mainText}为主`:`持仓涉及${mainText}等多个品种`;
+      if(h.valid&&names.length===1)text+=`（${amount(main[0].value)}，占${pct(main[0].value,h.total)}%）`;
+      const minor=h.cats.filter(c=>!names.includes(c.name)&&c.value/h.positiveTotal<RULES.minor&&c.name!=='其他').slice(0,2);if(minor.length)text+=`，少量持有${minor.map(c=>c.name).join('和')}`;text+='。';
+    }
+    const secondary=h.cats.filter(c=>!names.includes(c.name)&&c.value/h.positiveTotal>=RULES.minor&&c.name!=='其他').slice(0,2);if(secondary.length)text=text.replace(/。$/,'')+`，另持有${secondary.map(c=>`${c.name}${h.valid?`（约占${pct(c.value,h.total)}%）`:''}`).join('和')}。`;
+    if(names.includes('信用债')){const details=[];if(h.term)details.push(`期限集中在${h.term.label}`);if(h.rateNames.length)details.push(`评级以${h.rateNames.join('、')}为主`);if(details.length)text+=`信用债${details.join('，')}。`;}
+    if(names.includes('利率债')&&h.rateTerm)text+=`利率债持仓期限以${h.rateTerm.label}为主。`;
+    const metrics=[['持仓日期',idx.endDate||'材料未标明'],['识别持仓净市值',amount(h.total)],['构成分母','本次期末债券及基金市值；不使用账户净规模'],...h.cats.map(c=>[c.name,`${amount(c.value)}${h.valid?` / ${pct(c.value,h.total)}%`:''}`])];
+    if(h.term)metrics.push(['信用债期限集中度',`${h.term.label}：${pct(h.term.value,h.creditTotal)}%；分母为信用债市值`]);if(h.rateNames.length)metrics.push(['评级来源','中债隐含评级；AA(2)归入AA；未知评级保留在分母']);
+    return feature('holdings',text,metrics,a.end,115);
+  }
+  function selectFeatures(a,idx,h,s){
+    const candidates=[],hf=holdingFeature(a,idx,h);if(hf)candidates.push(hf);
+    const tradeMetrics=[['交易期间',s.month?monthLabel(s.month):`${idx.periodStart}至${idx.periodEnd}`],['常规交易金额',amount(s.total)],['常规交易笔数',`${s.trades.length}笔`],['金额口径','现券买卖、基金买卖、国债期货；买卖累计，回购和分销另列']];
+    const credit=s.categories.find(c=>c.name==='信用债'),rate=s.categories.find(c=>c.name==='利率债'),fund=s.categories.find(c=>c.name==='基金');
+    if(s.primaryYi>0){let text;if(s.primaryDominant)text=`以一级分销买入、二级市场卖出为主要交易方式，分销买入${amount(s.primaryYi)}、二级卖出${amount(s.bondSellYi)}。`;else if(!s.sell&&s.primaryShare>=.6)text=`本期主要参与一级分销买入，累计${amount(s.primaryYi)}，尚未见二级卖出。`;else text=`另有一级分销买入${amount(s.primaryYi)}${s.matchedPrimary>0?'，部分随后在二级市场卖出':''}。`;
+      candidates.push(feature('primary',text,[['分销买入',`${amount(s.primaryYi)} / ${s.primary.length}笔`],['分销占债券买入',`${pct(s.primaryShare,1)}%（不含基金、REITs、期货买入）`],['数量匹配后的二级卖出',amount(s.matchedPrimary)],['匹配方法','同账户、同证券及市场，按日期及可用成交时间匹配数量；期初存量不编造购入日']],sourceRecords(a,idx,s.flows.filter(r=>r.direction==='分销买入'||SELL.has(r.direction))),s.primaryDominant?120:65));
+    }
+    if(credit&&rate&&h.cats[0]?.name==='信用债'&&ratio(h.cats[0].value,h.positiveTotal)>=.6&&rate.rolling&&rate.share>=.1){
+      const creditText=credit.buyYi>credit.sellYi?'信用债以买入配置及调仓为主':'信用债兼有买卖调仓';
+      candidates.push(feature('credit-rate',`${creditText}，利率债${ratio(rate.shortYi,rate.sellYi)>=.6?'以波段买卖为主':'反复买卖'}，约占${pct(rate.amountYi,s.total)}%交易额。`,[...tradeMetrics,['信用债买入 / 卖出',`${amount(credit.buyYi)} / ${amount(credit.sellYi)}`],['利率债交易',`${amount(rate.amountYi)} / ${rate.count}笔`],['利率债同券双向交易金额覆盖',`${Math.round(rate.twoWayShare*100)}%`]],credit.rows.concat(rate.rows),110));
+    }else if(fund&&fund.share>=.6){
+      const label=fund.rows.every(r=>/ETF/i.test(r.name))?(fund.rows.every(r=>/债|短融/.test(r.name))?'债券ETF':'ETF'):'基金';
+      let text;if(!fund.sellYi)text=`${label}交易以买入配置为主，本期未见卖出。`;else if(fund.rolling)text=`以${fund.securities>1?'多只':''}${label}的滚动买卖为主。`;else text=`${label}${fund.buyYi>0?'兼有买入和卖出':'以卖出为主'}。`;
+      if(fund.sellThenBuy)text=text.replace(/。$/,'，兼有同日卖出后买回的操作。');else if(fund.sameDayPairs)text=text.replace(/。$/,'，兼有同日买卖。');
+      const other=s.categories.filter(c=>c.name!=='基金'&&c.share>=RULES.minor).slice(0,2);if(other.length)text+=`另有${other.map(c=>`${c.name}交易（约占${pct(c.amountYi,s.total)}%）`).join('和')}。`;
+      candidates.push(feature('fund-trading',text,[...tradeMetrics,['基金买入 / 卖出',`${amount(fund.buyYi)} / ${amount(fund.sellYi)}`],['同一基金同日双向交易',`${fund.sameDayPairs}个证券日期组合，涉及${fund.sameDayDates}个日期`],['已匹配1至2日持有的卖出金额',amount(fund.oneTwoYi)]],sourceRecords(a,idx,fund.rows),95));
+    }else if(s.total>0&&!s.primaryDominant){
+      const main=s.main.length?s.main.map(c=>c.name):s.categories.slice(0,2).map(c=>c.name);let text=`交易${s.main.length?'以':'涉及'}${main.join('和')}${s.main.length?'为主':'等品种'}`;
+      const c=s.categories[0];if(c?.share>=.6)text+=`（约占${pct(c.amountYi,s.total)}%交易额）`;
+      const other=s.categories.filter(c=>!main.includes(c.name)&&c.share>=RULES.minor).slice(0,2);if(other.length)text+=`，兼有${other.map(c=>c.name).join('和')}交易`;
+      if(c&&c.buyYi>0&&!c.sellYi)text+='，以买入为主';else if(c&&!c.buyYi&&c.sellYi)text+='，以卖出为主';else if(c?.rolling)text+='，同券反复买卖';text+='。';
+      candidates.push(feature('main-trading',text,[...tradeMetrics,...s.categories.map(c=>[c.name,`${amount(c.amountYi)} / ${c.count}笔；买入${amount(c.buyYi)}，卖出${amount(c.sellYi)}`])],s.trades,85));
+    }
+    for(const c of s.categories.filter(c=>c.smallMany))candidates.push(feature('small-'+c.name,`${c.name}${c.securities>=10?'参与面较广，':'以小额多笔交易为特点，'}笔数约占${pct(c.count,s.trades.length)}%，金额${c.share*100<.1?smallPercent(c.share*100):'仅占'+smallPercent(c.share*100)}，单笔金额中位数约${c.medianWan.toFixed(c.medianWan<10?1:0)}万元。`,[...tradeMetrics,['该品种交易',`${c.count}笔 / ${c.securities}只 / ${amount(c.amountYi)}`],['单笔中位数',`${c.medianWan.toFixed(2)}万元`],['小额多笔条件','至少10笔及3个交易日；金额≤5%，笔数≥20%，单笔中位数≤100万元']],c.rows,105));
+    if(rate?.rolling&&h.cats[0]?.name!=='信用债'&&rate.share<.6)candidates.push(feature('rate-trading',`另有利率债滚动买卖${h.cats.some(c=>c.name==='利率债')?'':'，期末未见利率债持仓'}。`,[['利率债交易',`${amount(rate.amountYi)} / ${rate.count}笔`],['买入 / 卖出',`${amount(rate.buyYi)} / ${amount(rate.sellYi)}`]],rate.rows,65));
+    if(rate&&rate.longShare>=.7&&rate.count>=3)candidates.push(feature('long-rate',`${h.rateTerm&&h.rateTerm.label!=='7年以上'?`利率债持仓偏${h.rateTerm.label}，交易侧`:'利率债交易'}主要涉及7年以上长端品种${rate.rolling?'，并有反复买卖':''}。`,[['长端成交金额占比',`${Math.round(rate.longShare*100)}%`],['期限来源','优先流水期限；缺失时参考本次期末剩余期限，不作为历史成交久期'],['文字长端口径','7年及以上；不修改现有9年图表/标签阈值']],rate.rows,90));
+    const heldFunds=h.cats.find(c=>c.name==='基金');if(heldFunds&&(!fund||fund.count<=3)&&!candidates.some(c=>c.key==='fund-trading'))candidates.push(feature('fund-holding','另有基金持仓，期间买卖较少。',[['基金持仓',amount(heldFunds.value)],['基金期间交易',`${fund?.count||0}笔`]],a.end.filter(r=>r.category==='基金').concat(fund?.rows||[]),45));
+    const strategy=str(a.meta.strategy?.cat2);if(/转债/.test(strategy)&&!s.categories.some(c=>c.name==='其他'&&c.share>.1)&&(s.categories.find(c=>c.name==='转债')?.share||0)<.05&&(h.cats.find(c=>c.name==='转债')?.value||0)/Math.max(h.positiveTotal,1e-12)<.1&&s.total>0)candidates.push(feature('official','策略表归类转债策略，实际持仓和交易金额主要集中在其他品种。',[['官方二级策略',strategy],['核对范围','仅描述本次材料中的实际参与，不作合规或业绩评价']],a.end.concat(s.trades),55));
+    if(!s.total&&!s.primaryYi&&s.repo.length){const rg=groups(s.repo,r=>r.direction,r=>r.yi),first=rg[0];candidates.push(feature('repo',`本期以${first?.name||'回购'}操作为主，回购累计${amount(sum(s.repo,r=>r.yi))}、${s.repo.length}笔。`,[['回购金额口径','回购单独累计，不与现券持仓比例混算'],...rg.map(g=>[g.name,amount(g.value)])],s.repo,110));}
+    if(!s.total&&!s.primaryYi&&h.positive.length)candidates.push(feature('no-trading','本期未见常规交易记录，以持仓观察为主。',[['常规交易记录','0笔（按本次导入期间）']],a.end,35));
+    if(!s.total&&!s.primaryYi&&!s.repo.length&&!h.positive.length&&s.last)candidates.push(feature('scale-only',`本期有规模报送，最近报送规模${amount(s.last.sizeYi)}；未见证券持仓明细和交易记录。`,[['最近报送日',s.last.date],['账户规模',amount(s.last.sizeYi)]],s.positions,70));
+    if(a.futures.length&&!candidates.some(c=>c.text.includes('期货')))candidates.push(feature('futures','另有国债期货持仓。',[['口径','合约手数及保证金单列，不加入债券与基金持仓市值分母']],a.futures,55));
+    candidates.sort((x,y)=>y.priority-x.priority);let chosen=[],length=0;for(const f of candidates){if(chosen.length>=4)break;if(chosen.length&&length+f.text.length>240)continue;chosen.push(f);length+=f.text.length;}
+    if(!chosen.length)chosen=[feature('empty','本次材料中未见可分析的交易或持仓记录。',[],[])];
+    return chosen;
+  }
+  function qualityEvidence(a,idx,h,s){const endScope=!s.month||s.month===idx.endDate.slice(0,7),rows=s.quality.concat(endScope&&(h.negative.length||h.balanceMismatch)?a.end:[]);return[feature('quality','取数提示及对应原始记录。',[['规则处理','沿用既有过滤与提醒；文字不会自动恢复被过滤记录'],['过滤记录',`${s.quality.filter(q=>q.level==='过滤').length}条`],['提醒记录',`${s.quality.filter(q=>q.level==='提醒').length}条`],['规则',unique(s.quality.map(q=>q.rule)).join('、')||'持仓核对']],rows)];}
+  function overview(idx,code){const cacheKey='all|'+code;if(idx.cache.has(cacheKey))return idx.cache.get(cacheKey);const a=idx.accounts.get(code);if(!a)return null;const h=holdings(a,idx),s=statistics(a,idx,null),features=selectFeatures(a,idx,h,s),start=a.meta.startDate||'';const future=start&&idx.periodEnd&&start>idx.periodEnd;const r={code,name:a.name,startDate:start,startLabel:start?(future?(a.flows.length?'起始日期待核对':'尚未进入观察期'):`${Number(start.slice(0,4))}年${start.slice(0,4)===idx.periodEnd.slice(0,4)?Number(start.slice(5,7))+'月新户':'启用'}`):'',features,evidenceFeatures:qualityEvidence(a,idx,h,s),text:features.map(f=>f.text).join(''),holding:h,stats:s,flags:flags(a,idx,h,s)};idx.cache.set(cacheKey,r);return r;}
+  function flags(a,idx,h,s){const f=[],endScope=!s.month||s.month===idx.endDate.slice(0,7);if(endScope&&h.negative.length)f.push('期末持仓存在负市值，构成比例未强行归一');if(endScope&&h.balanceMismatch)f.push('期末识别市值超过同日资产总值，持仓金额需核对');if(a.duplicates)f.push('本次导入期间存在重复交易编号，未据此推断交易频繁程度');const filtered=s.quality.filter(q=>q.level==='过滤');if(filtered.length)f.push(`${filtered.length}条记录按现有规则过滤`);if(s.categories.some(c=>c.name==='其他'&&c.amountYi>0))f.push('部分交易品种尚未识别');return f;}
+  function monthly(idx,code,month,extra={}){
+    const a=idx.accounts.get(code);if(!a)return null;const s=statistics(a,idx,month),h=holdings(a,idx),features=[];
+    const scopeMetrics=[['统计月份',monthLabel(month)],['交易口径','现券买卖、基金买卖、国债期货，买卖累计；分销及回购另列']];
+    const start=a.meta.startDate||'';if(start.slice(0,7)===month)features.push(feature('inception',`账户于${dateLabel(start)}启用。`,[['日期来源',a.meta.startSource||'账户资料']],[...a.meta.startRecord?[a.meta.startRecord]:[]],115));
+    if(s.total){const top=s.categories.slice(0,3);features.push(feature('monthly-total',`本月常规交易${amount(s.total)}、${s.trades.length}笔，${top.map(c=>`${c.name}${amount(c.amountYi)}（${pct(c.amountYi,s.total)}%）`).join('，')}。`,[...scopeMetrics,['交易总金额',amount(s.total)],['买入 / 卖出',`${amount(s.buy)} / ${amount(s.sell)}`]],s.trades,110));}
+    if(s.primaryYi){const detail=selectFeatures(a,idx,h,s).find(f=>f.key==='primary');if(detail)features.push(detail);}
+    const main=s.categories.filter(c=>c.share>=.1||c.countShare>=.3||h.main.some(x=>x.name===c.name)).slice(0,4);
+    for(const c of main){
+      let text=`${c.name}买入${amount(c.buyYi)}、卖出${amount(c.sellYi)}`;if(Math.abs(c.netYi)>.0001)text+=`，净${c.netYi>0?'买入':'卖出'}${amount(Math.abs(c.netYi))}`;text+='。';
+      if(c.rolling)text+=ratio(c.shortYi,c.sellYi)>=.6?'以波段买卖为主。':'同券反复买卖。';
+      if(c.name==='利率债'&&c.longShare>=.7)text+=`本月约${Math.round(c.longShare*100)}%成交涉及7年以上长端品种。`;
+      if(c.sellThenBuy)text+=`出现${c.sellThenBuy}个同券同日卖出后买回的组合。`;else if(c.sameDayPairs)text+=`出现${c.sameDayPairs}个同券同日双向交易组合。`;
+      if(c.smallMany)text+=`涉及${c.securities}只，单笔中位数${c.medianWan.toFixed(2)}万元，体现小额多笔特点。`;
+      if(c.primaryYi>0&&!s.primaryDominant)text+=`其中约${amount(c.primaryYi)}卖出可对应此前分销买入。`;
+      if(c.openingYi>0&&!c.buyYi)text+='卖出包含期初存量，购入日不由本期材料补推。';
+      if(c.name==='基金'){const th=groups(c.rows,r=>theme(r.name),r=>r.yi).filter(t=>t.name!=='其他主题').slice(0,2);if(th.length&&ratio(sum(th,t=>t.value),c.amountYi)>=.7)text+=`基金成交主要集中在${th.map(t=>`${t.name}（${pct(t.value,c.amountYi)}%）`).join('和')}。`;}
+      features.push(feature('monthly-'+c.name,text,[...scopeMetrics,['该品种金额 / 笔数',`${amount(c.amountYi)} / ${c.count}笔`],['成交金额差',`买入${amount(c.buyYi)}－卖出${amount(c.sellYi)}`],['已知买入日的卖出匹配金额',amount(c.knownYi)],['可对应分销的卖出',amount(c.primaryYi)],['来源未匹配的卖出金额',amount(c.unmatchedYi)]],sourceRecords(a,idx,c.rows),95));
+    }
+    const previous=statistics(a,idx,prevMonth(month));
+    if(previous.total>0&&s.total>0&&idx.periodStart.slice(0,7)<month&&(!start||start<prevMonth(month)+'-01')){
+      const change=s.total/previous.total-1;if(Math.abs(change)>=.3)features.push(feature('trade-change',`常规交易金额较上月${change>0?'增加':'减少'}${Math.abs(change*100).toFixed(1)}%。`,[['本月 / 上月',`${amount(s.total)} / ${amount(previous.total)}`],['公式','本月交易金额÷上月交易金额－1；不跨缺报月份比较']],s.trades.concat(previous.trades),70));
+      const before=previous.categories[0],after=s.categories[0];if(before&&after&&before.name!==after.name&&before.share>=.6&&after.share>=.6)features.push(feature('category-change',`交易重心由上月${before.name}转为${after.name}。`,[['上月主品种',`${before.name} / ${Math.round(before.share*100)}%`],['本月主品种',`${after.name} / ${Math.round(after.share*100)}%`]],s.trades.concat(previous.trades),85));
+    }
+    if(s.last){let text=`本月最后报送日${dateLabel(s.last.date)}，账户规模${amount(s.last.sizeYi)}`;if(s.prior&&s.prior.sizeYi>0){const ch=s.last.sizeYi/s.prior.sizeYi-1;text+=`，较上月最后报送规模${ch>=0?'增加':'减少'}${Math.abs(ch*100).toFixed(1)}%`;}text+='。';features.push(feature('scale',text,[['本月规模日期',s.last.date],['上月规模日期',s.prior?.date||'无可比记录'],['规模口径','规模表账户净规模；与持仓市值及买卖金额差分别观察']],[s.last,...s.prior?[s.prior]:[]],65));}
+    if(idx.endDate.slice(0,7)===month&&h.positive.length){const f=holdingFeature(a,idx,h);f.key='monthly-holdings';f.text=`截至${dateLabel(idx.endDate)}，${f.text.replace(/^持仓/,'持仓')}`;features.push(f);}
+    if(s.repo.length)features.push(feature('monthly-repo',`回购累计${amount(sum(s.repo,r=>r.yi))}、${s.repo.length}笔，其中${groups(s.repo,r=>r.direction,r=>r.yi).map(g=>`${g.name}${amount(g.value)}`).join('、')}。`,[['回购统计','独立于常规交易金额']],s.repo,40));
+    if(!s.total&&!s.primaryYi&&!s.repo.length)features.unshift(feature('monthly-empty','本月导入记录中未见常规交易、分销或回购。',[...scopeMetrics],[],30));
+    const lines=[`【${a.name}】${monthLabel(month)}账户分析`,...features.map(f=>f.text)];
+    if(extra.closed>=3&&extra.winRate!=null)lines.push(`现有现券FIFO口径：本月匹配${extra.closed}个片段，价格配对胜率${extra.winRate}%。`);
+    if(extra.fee!=null)lines.push(`本月投顾费到账${extra.fee.toFixed(2)}万元。`);
+    if(extra.navChg!=null)lines.push(`当月首末可用净值变化${extra.navChg>=0?'+':''}${extra.navChg.toFixed(2)}%。`);
+    return{code,month,features,evidenceFeatures:qualityEvidence(a,idx,h,s),text:lines.join('\n\n'),summary:features.filter(f=>!['inception','scale','monthly-repo','monthly-holdings'].includes(f.key)).slice(0,2).map(f=>f.text).join(''),stats:s,flags:flags(a,idx,h,s)};
+  }
+  function evidence(idx,code,key,month){const r=month&&month!=='all'?monthly(idx,code,month):overview(idx,code);const f=r&&[...r.features,...r.evidenceFeatures||[]].find(x=>x.key===key);if(!f)return null;return{...f,records:f.recordIds.map(id=>idx.records.get(id)).filter(Boolean),flags:r.flags};}
+  return{VERSION,RULES,build,overview,monthly,evidence,statistics,holdings,amount,dateLabel,monthLabel,prevMonth};
+})();
+// ACCOUNT_NARRATIVE_END
+
+function noteEsc(value){return String(value==null?'':value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function noteToken(value){return encodeURIComponent(value==null?'':String(value)).replace(/'/g,'%27');}
+function noteIndex(){return currentResult&&currentResult.accountNarrative;}
+function noteFeatureButton(code,feature,month,label){return`<button type="button" class="note-evidence" onclick="showNarrativeEvidence('${noteToken(code)}','${noteToken(feature.key)}','${noteToken(month||'all')}')">${noteEsc(label||'依据')}</button>`;}
+function renderAccountNarrative(code){
+  const idx=noteIndex(),r=idx&&AccountNarrative.overview(idx,code);if(!r)return'';
+  const month=profileState.month&&profileState.month!=='all'?profileState.month:'';
+  const monthly=month&&idx.accounts.get(code)?.months.includes(month)?AccountNarrative.monthly(idx,code,month):null;
+  return`<section class="note-panel" id="accountNarrativePanel" data-code="${noteEsc(code)}"><div class="note-heading">账户特点 ${r.startLabel?`<span class="badge badge-blue">${noteEsc(r.startLabel)}</span>`:''}<span class="note-version">文字分析 ${AccountNarrative.VERSION}</span></div><div class="note-scope">观察区间：${noteEsc(idx.periodStart||'未标明')}—${noteEsc(idx.periodEnd||'未标明')} · 持仓：${noteEsc(idx.endDate||'本次期末材料')}</div><div class="note-prose">${r.features.map(f=>`<span>${noteEsc(f.text)}${noteFeatureButton(code,f,'all')}</span>`).join('')}</div>${r.flags.length?`<details class="note-quality"><summary>取数提示 ${r.flags.length}项</summary><ul>${r.flags.map(s=>`<li>${noteEsc(s)}</li>`).join('')}</ul>${noteFeatureButton(code,{key:'quality'},'all','查看对应记录')}</details>`:''}${monthly?`<div class="note-month"><strong>${noteEsc(AccountNarrative.monthLabel(month))}交易补充</strong><p>${noteEsc(monthly.summary)} ${monthly.features.filter(f=>f.key==='monthly-total').map(f=>noteFeatureButton(code,f,month,'查看当月依据')).join('')}</p></div>`:''}</section>`;
+}
+function refreshAccountNarrative(){const el=document.getElementById('accountNarrativePanel');if(el&&el.dataset.code)el.outerHTML=renderAccountNarrative(el.dataset.code);}
+function renderNarrativeMonthCard(code,month){
+  const idx=noteIndex(),r=idx&&AccountNarrative.monthly(idx,code,month);if(!r)return'';
+  const a=idx.accounts.get(code),isNew=a.meta.startDate?.slice(0,7)===month;
+  return`<div class="account-detail note-story-card" style="margin-top:12px"><div class="detail-header">${noteEsc(month)} ${isNew?'<span class="badge badge-green">启用当月</span>':''}<button type="button" class="note-evidence" onclick="selectNarrativeMonth('${noteToken(month)}')">查看详细月报</button></div><p class="note-prose">${noteEsc(r.summary||'本月未见交易记录。')}</p><details class="note-month-details"><summary>展开本月分析及依据</summary>${r.features.map(f=>`<p>${noteEsc(f.text)}${noteFeatureButton(code,f,month)}</p>`).join('')}${r.flags.length?`<p class="note-warning">${r.flags.map(noteEsc).join('；')}</p>`:''}</details></div>`;
+}
+function selectNarrativeMonth(token){storyState.reportMonth=decodeURIComponent(token);renderStoryPanel();const box=document.getElementById('storyReportText');if(box)box.scrollIntoView({behavior:'smooth',block:'center'});}
+function renderStoryNarrativeEvidence(code,month){
+  const box=document.getElementById('storyNarrativeEvidence');if(!box)return;
+  const r=noteIndex()&&AccountNarrative.monthly(noteIndex(),code,month);if(!r){box.innerHTML='';return;}
+  const labels={'monthly-total':'当月交易','primary':'一级与二级来源','scale':'规模','monthly-holdings':'本期持仓','trade-change':'交易变化','category-change':'品种变化','monthly-repo':'回购','inception':'运作日期'};
+  box.innerHTML=`<div class="note-scope">查看支撑指标和原始记录：${r.features.filter(f=>f.recordIds.length||f.metrics.length).map(f=>noteFeatureButton(code,f,month,labels[f.key]||f.key.replace('monthly-',''))).join('')}</div>${r.flags.length?`<details class="note-quality"><summary>取数提示 ${r.flags.length}项</summary><ul>${r.flags.map(s=>`<li>${noteEsc(s)}</li>`).join('')}</ul>${noteFeatureButton(code,{key:'quality'},month,'查看对应记录')}</details>`:''}`;
+}
+function closeNarrativeEvidence(){const old=document.getElementById('narrativeEvidenceOverlay');if(old){if(old._close)old._close();else old.remove();}}
+function showNarrativeEvidence(codeToken,keyToken,monthToken){
+  const code=decodeURIComponent(codeToken),key=decodeURIComponent(keyToken),month=decodeURIComponent(monthToken||'all'),data=noteIndex()&&AccountNarrative.evidence(noteIndex(),code,key,month);if(!data)return;
+  closeNarrativeEvidence();const previousFocus=document.activeElement;
+  const overlay=document.createElement('div');overlay.id='narrativeEvidenceOverlay';overlay.className='note-overlay';
+  const dialog=document.createElement('section');dialog.className='note-dialog';dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label','分析依据');overlay.appendChild(dialog);
+  const header=document.createElement('div');header.className='note-dialog-head';const title=document.createElement('strong');title.textContent='分析依据';header.appendChild(title);const close=document.createElement('button');close.type='button';close.textContent='关闭';header.appendChild(close);dialog.appendChild(header);
+  const body=document.createElement('div');body.className='note-dialog-body';dialog.appendChild(body);const claim=document.createElement('p');claim.className='note-prose';claim.textContent=data.text;body.appendChild(claim);
+  const table=document.createElement('table'),tbody=document.createElement('tbody');table.appendChild(tbody);for(const [label,value]of data.metrics){const tr=document.createElement('tr');for(const v of [label,value]){const td=document.createElement('td');td.textContent=String(v??'');tr.appendChild(td);}tbody.appendChild(tr);}body.appendChild(table);
+  if(data.flags.length){const p=document.createElement('p');p.className='note-warning';p.textContent=data.flags.join('；');body.appendChild(p);}
+  const search=document.createElement('input');search.type='search';search.placeholder='按证券、日期、文件或交易编号查找';search.className='note-record-search';body.appendChild(search);
+  const recordBox=document.createElement('div');recordBox.className='table-container';body.appendChild(recordBox);const pager=document.createElement('div');pager.className='pager';body.appendChild(pager);let page=0;
+  const render=()=>{
+    const q=search.value.trim().toLowerCase(),rows=data.records.filter(r=>!q||[r.code,r.name,r.date,r.tradeId,r.direction,r.source?.file,r.source?.sheet,r.source?.row].join(' ').toLowerCase().includes(q));
+    const totalPages=Math.max(1,Math.ceil(rows.length/40));page=Math.max(0,Math.min(page,totalPages-1));recordBox.replaceChildren();
+    const t=document.createElement('table'),head=document.createElement('thead'),hr=document.createElement('tr');for(const v of ['日期','业务 / 记录','证券代码','名称','方向','金额 / 规模','评级 / 期限 / 说明','原始位置']){const th=document.createElement('th');th.textContent=v;hr.appendChild(th);}head.appendChild(hr);t.appendChild(head);const b=document.createElement('tbody');
+    for(const r of rows.slice(page*40,(page+1)*40)){
+      const tr=document.createElement('tr'),src=r.source,location=src?`${src.file||''} / ${src.sheet||''} / ${src.row?`第${src.row}行`:'原行号未保留'}`:'此导入记录未保留来源位置';
+      const val=r.kind==='info'?r.value||'—':r.kind==='scale'?AccountNarrative.amount(r.sizeYi):r.kind==='future'?`${r.qty}手 / 保证金${r.marginWan.toFixed(2)}万元`:AccountNarrative.amount(r.yi||0);
+      const values=[r.date||'未标明',(r.kind==='quality'?`${r.rule||''} ${r.level||''} ${r.variety||''}`:r.variety)||({holding:r.snapshot==='start'?'期初持仓':'期末持仓',scale:'规模表',future:'期货持仓',quality:`${r.rule||''} ${r.level||''}`}[r.kind]||r.kind),r.code||'',r.name||'',r.direction||'',val,r.kind==='quality'?r.detail||'—':r.kind==='holding'?`${r.rating||'—'} / ${r.remain>0?r.remain.toFixed(2)+'年':'—'}`:'—',`${location}${r.tradeId?` / 交易编号 ${r.tradeId}`:''}`];
+      for(const value of values){const td=document.createElement('td');td.textContent=String(value);tr.appendChild(td);}b.appendChild(tr);
+    }
+    if(!rows.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=8;td.textContent='没有对应记录；日期或基础资料的指标见上方取数说明。';tr.appendChild(td);b.appendChild(tr);}t.appendChild(b);recordBox.appendChild(t);
+    pager.replaceChildren();const status=document.createElement('span');status.textContent=`共${rows.length}条，第${page+1}/${totalPages}页`;pager.appendChild(status);const nav=document.createElement('span');for(const [label,delta]of [['上一页',-1],['下一页',1]]){const btn=document.createElement('button');btn.type='button';btn.textContent=label;btn.disabled=delta<0?page===0:page>=totalPages-1;btn.onclick=()=>{page+=delta;render();};nav.appendChild(btn);}pager.appendChild(nav);
+  };
+  const onKey=e=>{if(e.key==='Escape')cleanup();if(e.key==='Tab'){const els=[...dialog.querySelectorAll('button,input')].filter(x=>!x.disabled);if(!els.length)return;const first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}};
+  function cleanup(){document.removeEventListener('keydown',onKey);overlay.remove();if(previousFocus?.isConnected)previousFocus.focus();}
+  overlay._close=cleanup;close.onclick=cleanup;overlay.onclick=e=>{if(e.target===overlay)cleanup();};search.oninput=()=>{page=0;render();};document.body.appendChild(overlay);document.addEventListener('keydown',onKey);render();close.focus();
+}
+
+function runAnalysis(...args){
+  const r=runAnalysisCore(...args);
+  r.accountNarrative=AccountNarrative.build(r._store,r.acctDim||{},{quality:r._narrativeQuality||[]});
+  return r;
+}
 function renderSummary(summary){
   const el=document.getElementById('summaryBar');
   el.innerHTML=`<div class="stats-grid">
@@ -2859,7 +3159,7 @@ function renderStoryTab(r){
   const top=storyTopAccounts(r);
   const mgrOpts=(r.manager&&r.manager.hasData)?r.manager.mgrs.map(m=>`<option value="${m.line}|${m.name}">${m.name}（${m.line}，${m.acctCount}户）</option>`).join(''):'';
   return`<div class="card"><div class="card-header"><div class="card-title">故事行为线</div></div><div class="card-body">
-    <p style="color:#64748b;font-size:13px;margin-bottom:12px">按月串联行为轨迹：月末规模与环比、回购/债券交易量、净买入方向、当月 FIFO 闭合胜负、投顾费到账（需槽位⑤，共管按 1/N 分摊），自动拼装叙事并生成任意月度的文字小结（可复制进周报）。三个层级：单账户 / 经理（名下账户聚合）/ 整体（全部交易账户）。徽标：🌱 首次出现/新开户 · ⚠️ 规模环比±30% · 🔀 规模转向 · 🔄 主力品种切换 · 📉 净值月跌超1%/胜率骤降 · 💰 费用到账。</p>
+    <p style="color:#64748b;font-size:13px;margin-bottom:12px">单账户按月分析持仓与交易方式、一级分销与二级卖出、基金同日买卖及小额多笔特征，并可查看原始依据；经理与整体继续展示规模、交易、现有FIFO和投顾费到账（需槽位⑤，共管按 1/N 分摊），自动拼装叙事并生成任意月度的文字小结（可复制进周报）。三个层级：单账户 / 经理（名下账户聚合）/ 整体（全部交易账户）。徽标：🌱 首次出现/新开户 · ⚠️ 规模环比±30% · 🔀 规模转向 · 🔄 主力品种切换 · 📉 净值月跌超1%/胜率骤降 · 💰 费用到账。</p>
     <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
       <span style="font-size:13px;color:#64748b">层级：</span>
       <select id="storyLevel" onchange="onStoryLevel(this.value)" style="padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
@@ -2921,11 +3221,11 @@ function storySubject(){
   }
   if(!storyState.code)return null;
   const code=storyState.code;
-  const name=toStr(r._store.hg.find(x=>toStr(x._code)===code)?._name)||toStr(r._store.zq.find(x=>toStr(x._code)===code)?._name)||toStr(r._store.pos.find(x=>toStr(x._code)===code)?._nameSAC)||code;
+  const name=toStr(r.accountNarrative?.accounts.get(code)?.name)||toStr(r._store.hg.find(x=>toStr(x._code)===code)?._name)||toStr(r._store.zq.find(x=>toStr(x._code)===code)?._name)||toStr(r._store.pos.find(x=>toStr(x._code)===code)?._nameSAC)||code;
   return{label:`${code} ${name}`,codes:[code],code,single:true};
 }
 // 聚合版故事数据：codes 可为单账户或多账户；费用=分摊后口径
-function buildStoryData(codes){
+function buildStoryData(codes,accountCode=''){
   const r=currentResult;
   const cs=new Set(codes);
   const hg=r._store.hg.filter(x=>cs.has(toStr(x._code)));
@@ -2935,6 +3235,7 @@ function buildStoryData(codes){
   for(const x of hg)if(x._month)mSet.add(x._month);
   for(const x of zq)if(x._month)mSet.add(x._month);
   for(const x of pos)mSet.add(getMonthKey(x._date));
+  if(accountCode&&r.accountNarrative)for(const m of r.accountNarrative.accounts.get(accountCode)?.months||[])mSet.add(m);
   const months=Array.from(mSet).sort();
   const fbcm=r.manager&&r.manager.feeByCodeMonth?r.manager.feeByCodeMonth:{};
   const fifoBM=r.fifo&&r.fifo.byMonth?r.fifo.byMonth:{};
@@ -2998,10 +3299,11 @@ function buildStoryData(codes){
     if(topCat)prevTopCat=topCat;
     if(winRate!=null)prevWin=winRate;
   }
-  return{months,rows};
+  return{months,rows,accountCode};
 }
 // 任意月月度小结文本（可复制进周报）
 function buildMonthlyReport(label,sd,m){
+  if(sd.accountCode&&currentResult?.accountNarrative){const row=sd.rows.find(w=>w.month===m)||{};const report=AccountNarrative.monthly(currentResult.accountNarrative,sd.accountCode,m,row);if(report)return report.text;}
   const i=sd.rows.findIndex(x=>x.month===m);
   if(i<0)return'';
   const w=sd.rows[i];
@@ -3033,10 +3335,11 @@ function renderStoryReportBox(){
   if(!box)return;
   const sub=storySubject();
   if(!sub)return;
-  const sd=buildStoryData(sub.codes);
+  const sd=buildStoryData(sub.codes,sub.single?sub.code:'');
   const m=storyState.reportMonth||sd.rows[sd.rows.length-1].month;
   window.__storyReportText=buildMonthlyReport(sub.label,sd,m);
   box.textContent=window.__storyReportText;
+  if(sub.single)renderStoryNarrativeEvidence(sub.code,m);else{const evidence=document.getElementById('storyNarrativeEvidence');if(evidence)evidence.innerHTML='';}
 }
 function renderStoryPanel(){
   const box=document.getElementById('storyOut');
@@ -3044,7 +3347,7 @@ function renderStoryPanel(){
   const r=currentResult;
   const sub=storySubject();
   if(!sub){box.innerHTML='<div class="empty-state">选择对象后展示故事行为线</div>';return}
-  const sd=buildStoryData(sub.codes);
+  const sd=buildStoryData(sub.codes,sub.single?sub.code:'');
   if(!sd.rows.length){box.innerHTML='<div class="empty-state">该对象无数据</div>';return}
   const repM=storyState.reportMonth||sd.rows[sd.rows.length-1].month;
   storyState.reportMonth=repM;
@@ -3071,9 +3374,10 @@ function renderStoryPanel(){
         <select onchange="onStoryReportMonth(this.value)" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">${sd.rows.map(w=>`<option value="${w.month}"${w.month===repM?' selected':''}>${w.month}</option>`).join('')}</select>
         <button id="storyCopyBtn" class="tab" style="padding:4px 12px;border:1px solid #cbd5e1;cursor:pointer" onclick="copyStoryReport()">复制报告文本</button>
       </span></div>
-      <pre id="storyReportText" style="white-space:pre-wrap;font-size:13px;color:#334155;line-height:1.9;font-family:inherit;margin:8px 0 0"></pre></div>
+      <pre id="storyReportText" style="white-space:pre-wrap;font-size:13px;color:#334155;line-height:1.9;font-family:inherit;margin:8px 0 0"></pre><div id="storyNarrativeEvidence"></div></div>
     <div class="account-detail" style="margin-top:12px"><div class="detail-header">月末规模 vs 月交易金额（亿元）</div><div id="chart-story" class="chart" style="height:260px"></div></div>`;
   sd.rows.forEach((w,i)=>{
+    if(sub.single){html+=renderNarrativeMonthCard(sub.code,w.month);return;}
     const ev=[];
     if(sub.single&&i===0)ev.push('<span class="badge badge-green">🌱 首次出现</span>');
     for(const e of w.events){
@@ -3642,6 +3946,7 @@ function findAccountCandidates(q){
   for(const rec of r._store.hg)add(toStr(rec._code),toStr(rec._name));
   for(const rec of r._store.zqAll)add(toStr(rec._code),toStr(rec._name));
   for(const rec of r._store.pos)add(toStr(rec._code),toStr(rec._nameSAC));
+  if(r.accountNarrative)for(const [code,a]of r.accountNarrative.accounts)add(code,a.name);
   const out=[];
   for(const[code,name]of map){if(code.includes(q)||name.includes(q))out.push({code,name})}
   return out.slice(0,20);
@@ -3659,7 +3964,7 @@ function accountSearch(){
   box.innerHTML=`<div class="section-title">匹配到 ${cands.length} 个账户，点击查看：</div>`+cands.map(c=>`<button class="tab" style="margin:0 8px 8px 0;border:1px solid #cbd5e1" onclick="showAccountProfile('${c.code}')"><span class="font-mono">${c.code}</span> ${c.name}</button>`).join('');
 }
 
-function buildAccountProfileHtml(code){
+function buildAccountProfileHtml(code,includeNote=false){
   const r=currentResult;
   if(!r||!r._store)return'';
   const hg=r._store.hg.filter(x=>toStr(x._code)===code);
@@ -3704,20 +4009,20 @@ function buildAccountProfileHtml(code){
   let checkBadge='';
   if(stratRow&&stratRow.cat1&&id&&id.type){
     const officialPlus=stratRow.cat1.includes('固收+')||stratRow.cat1.includes('+');
-    if(officialPlus!==(id.type==='固收+'))checkBadge=` <span class="badge badge-amber" title="策略业绩表一级分类与平台固收+/纯债判定不一致，请核对">口径校验:官方${stratRow.cat1} vs 平台${id.type}</span>`;
+    if(officialPlus!==(id.type==='固收+'))checkBadge=` <span class="badge badge-amber" title="策略业绩表一级分类与平台固收+/纯债判定不一致，请核对">口径校验:官方${noteEsc(stratRow.cat1)} vs 平台${id.type}</span>`;
   }
   const sid='pf'+(++buildAccountProfileHtml.seq);
   buildAccountProfileHtml.lastSid=sid;
-  return`<div class="account-detail" style="margin-top:12px"><div class="detail-header"><span class="font-mono">${code}</span> ${name} ${tag?tagBadge(tag):''} ${id&&id.type?typeBadge(id.type):''} ${id&&id.style?styleBadge(id.style):''}${checkBadge}</div>
+  return`${includeNote?renderAccountNarrative(code):''}<div class="account-detail" style="margin-top:12px"><div class="detail-header"><span class="font-mono">${noteEsc(code)}</span> ${noteEsc(name)} ${tag?tagBadge(tag):''} ${id&&id.type?typeBadge(id.type):''} ${id&&id.style?styleBadge(id.style):''}${checkBadge}</div>
     ${behTags.length>0?`<div class="detail-row" style="flex-wrap:wrap;gap:6px;margin-top:6px">${behTags.map(behBadge).join(' ')}</div>`:''}
     <div class="detail-row">
-      <span>归属: ${belong}</span>
-      <span>账户状态: <strong>${status}</strong></span>
+      <span>归属: ${noteEsc(belong)}</span>
+      <span>账户状态: <strong>${noteEsc(status)}</strong></span>
       ${last?`<span>最新规模: ${(last._size/1e8).toFixed(2)}亿</span><span>资产配置率: ${id&&id.endMV>0&&last._size>0?(id.endMV/(last._size/1e8)*100).toFixed(0)+'%':'-'}</span><span>杠杆率: ${last._lev!=null?(last._lev*100).toFixed(1)+'%':'-'}</span><span>净值: ${last._nav!=null?last._nav.toFixed(4):'-'}</span>`:'<span>无持仓数据</span>'}
     </div>
     ${dimRow||stratRow?`<div class="detail-row" style="flex-wrap:wrap;gap:14px;margin-top:4px;border-top:1px dashed #e2e8f0;padding-top:8px">
-      ${dimRow?`<span>投资经理: <strong>${dimRow.managers.join('、')||'-'}</strong>${dimRow.managers.length>1?' <span class="badge badge-amber">共管</span>':''}</span><span>所属组别: ${dimRow.group||'-'}</span><span>委托人: ${dimRow.client||'-'}${dimRow.clientType?'（'+dimRow.clientType+'）':''}</span><span>资金来源: ${dimRow.fundSource||'-'}</span>${dimRow.key2026==='是'?'<span class="badge badge-red">2026重点业务</span>':''}`:''}
-      ${stratRow?`<span>官方分类: <strong>${stratRow.cat1||'-'}${stratRow.cat2?' / '+stratRow.cat2:''}</strong>${stratRow.detail?'（'+stratRow.detail+'）':''}</span>`:''}
+      ${dimRow?`<span>投资经理: <strong>${noteEsc(dimRow.managers.join('、')||'-')}</strong>${dimRow.managers.length>1?' <span class="badge badge-amber">共管</span>':''}</span><span>所属组别: ${noteEsc(dimRow.group||'-')}</span><span>委托人: ${noteEsc(dimRow.client||'-')}${dimRow.clientType?'（'+dimRow.clientType+'）':''}</span><span>资金来源: ${noteEsc(dimRow.fundSource||'-')}</span>${dimRow.key2026==='是'?'<span class="badge badge-red">2026重点业务</span>':''}`:''}
+      ${stratRow?`<span>官方分类: <strong>${noteEsc(stratRow.cat1||'-')}${stratRow.cat2?' / '+stratRow.cat2:''}</strong>${stratRow.detail?'（'+stratRow.detail+'）':''}</span>`:''}
       ${(dimRow&&dimRow.bench!=null)||(stratRow&&stratRow.bench!=null)?`<span>业绩基准: ${(stratRow&&stratRow.bench!=null?stratRow.bench:dimRow.bench)}%</span>`:''}
       ${stratRow&&stratRow.retYtd!=null?`<span>今年以来收益率: ${stratRow.retYtd}%</span>`:''}
       ${stratRow&&stratRow.retStatic!=null?`<span>静态收益率: ${stratRow.retStatic}%</span>`:''}
@@ -3802,7 +4107,7 @@ function initProfileCharts(sid,code){
 function showAccountProfile(code){
   const box=document.getElementById('acctProfileOut');
   if(!box)return;
-  box.innerHTML=`<div class="section-title">账户完整画像</div>`+buildAccountProfileHtml(code);
+  box.innerHTML=`<div class="section-title">账户完整画像</div>`+buildAccountProfileHtml(code,true);
   initProfileCharts(buildAccountProfileHtml.lastSid,code);
   box.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
@@ -4066,7 +4371,7 @@ function initCharts(result){
 }
 
 const pendingFiles={flow:[],pos:[],hdStart:[],hdEnd:[],acctInfo:[]};
-const acctInfoCache={}; // 文件名+大小 → parseAcctInfoWb 结果（上传时预识别，分析时复用）
+const acctInfoCache=new WeakMap(); // Only reuse parsing for the same immutable File object in this page session.
 let activeSlot=null;
 document.querySelectorAll('.upload-slot').forEach(slot=>{
   slot.addEventListener('click',()=>{activeSlot=slot.dataset.slot;document.getElementById('fileInput').click()});
@@ -4095,10 +4400,10 @@ function assignFiles(slot,fileList){
     (async()=>{
       const found=[];
       for(const f of pendingFiles.acctInfo){
-        const ck=f.name+'|'+f.size;
+        const ck=f;
         try{
-          if(!acctInfoCache[ck])acctInfoCache[ck]=parseAcctInfoWb(await readWb(f),f.name);
-          for(const x of acctInfoCache[ck].found)found.push(x);
+          if(!acctInfoCache.has(ck))acctInfoCache.set(ck,parseAcctInfoWb(await readWb(f),f.name));
+          for(const x of acctInfoCache.get(ck).found)found.push(x);
         }catch(e){found.push({type:'',label:f.name+' 解析失败:'+e.message,rows:0,file:f.name})}
       }
       const ok=found.filter(x=>x.rows>0);
@@ -4143,7 +4448,7 @@ document.getElementById('startBtn').addEventListener('click',async()=>{
       if(i<pendingFiles.flow.length){
         setLoading(`正在解析交易流水 ${i+1}/${pendingFiles.flow.length}（${pendingFiles.flow[i].name}）…`);
         await tick();
-        const f=parseFlowWb(await readWb(pendingFiles.flow[i]));
+        const f=parseFlowWb(await readWb(pendingFiles.flow[i]),pendingFiles.flow[i].name);
         for(const x of f.hgRaw)mergeHg.push(x); // 不用展开运算符：大数组 push(...) 会栈溢出
         for(const x of f.zqRaw)mergeZq.push(x);
         if(f.posRaw.length)for(const x of f.posRaw)mergePos.push(x);
@@ -4152,11 +4457,12 @@ document.getElementById('startBtn').addEventListener('click',async()=>{
       if(i<pendingFiles.pos.length){
         setLoading(`正在解析持仓规模 ${i+1}/${pendingFiles.pos.length}…`);
         await tick();
-        const posPart=parsePosWb(await readWb(pendingFiles.pos[i]));
+        const posPart=parsePosWb(await readWb(pendingFiles.pos[i]),pendingFiles.pos[i].name);
         for(const x of posPart)mergePos.push(x);
       }
     }
     if(!mergeHg.length&&!mergeZq.length)throw new Error('交易流水文件解析为空，请确认文件格式');
+    closeNarrativeEvidence();
     setLoading('正在解析期初持仓明细…');
     await tick();
     const hdStart=parseHoldingsWb(await readWb(pendingFiles.hdStart[0]),pendingFiles.hdStart[0].name);
@@ -4171,9 +4477,9 @@ document.getElementById('startBtn').addEventListener('click',async()=>{
         const f=pendingFiles.acctInfo[i];
         setLoading(`正在解析账户信息 ${i+1}/${pendingFiles.acctInfo.length}（${f.name}）…`);
         await tick();
-        const ck=f.name+'|'+f.size;
-        if(!acctInfoCache[ck])acctInfoCache[ck]=parseAcctInfoWb(await readWb(f),f.name);
-        const part=acctInfoCache[ck];
+        const ck=f;
+        if(!acctInfoCache.has(ck))acctInfoCache.set(ck,parseAcctInfoWb(await readWb(f),f.name));
+        const part=acctInfoCache.get(ck);
         for(const x of part.strategy)acctInfo.strategy.push(x);
         for(const x of part.fees)acctInfo.fees.push(x);
         for(const x of part.iamTg)acctInfo.iamTg.push(x);
