@@ -87,7 +87,7 @@ th .th-sort:hover{color:#1d4ed8}
 #mgrCompareWrap table th,#mgrCompareWrap table td{text-align:center!important}
 @media(max-width:768px){.container{padding:12px}.stats-grid{grid-template-columns:repeat(2,1fr)}.grid-2{grid-template-columns:1fr}.tabs{gap:2px}.tab{padding:8px 12px;font-size:12px}}
 .note-panel{background:#fff;border:1px solid #bfdbfe;border-left:4px solid #3b82f6;border-radius:10px;padding:16px 18px;margin:12px 0}
-.note-heading{font-weight:600;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.note-version{font-size:11px;color:#94a3b8;font-weight:400;margin-left:auto}
+.note-heading{font-weight:600;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .note-scope{font-size:12px;color:#64748b;margin:6px 0 10px}.note-prose{font-size:14px;color:#334155;line-height:1.95;overflow-wrap:anywhere}
 .note-evidence{border:0;background:#eff6ff;color:#2563eb;border-radius:4px;padding:1px 6px;margin:0 5px;font-size:11px;cursor:pointer;vertical-align:baseline;white-space:nowrap}.note-evidence:hover{background:#dbeafe}.note-evidence:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
 .note-month{border-top:1px solid #e2e8f0;margin-top:10px;padding-top:10px;font-size:13px;color:#475569}.note-quality{font-size:12px;color:#92400e;margin-top:8px}.note-quality ul{margin:6px 0 0 18px}
@@ -2456,7 +2456,7 @@ let currentResult=null;let chartInstances={};
 // All facts and reports below are computed in page memory from the current imports.
 const AccountNarrative = (() => {
   'use strict';
-  const VERSION = '2026.10.22.1';
+  const VERSION = '2026.10.22.2';
   const RULES = Object.freeze({main:.60,pairMain:.80,pairMinimum:.20,minor:.10,concentrated:.70,smallAmount:.05,manyCount:.20,smallMedianWan:100,minManyCount:10});
   const STANDARD = new Set(['现券买卖','基金买卖','国债期货']);
   const BUY = new Set(['买入','分销买入','期货买入']);
@@ -2481,7 +2481,7 @@ const AccountNarrative = (() => {
   const source = r => r._source||r.__source||r.raw?.__source||null;
   const clock = (r,d) => {for(const v of [r['成交时间'],r['交易时间']]){const s=str(v),m=s.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);if(m&&(day(s)===d||!day(s)&&/^\d{1,2}:/.test(s)))return `${m[1].padStart(2,'0')}:${m[2]}:${m[3]||'00'}`;}return'';};
   const category = r => {const c=str(r._class||r.category);if(c)return c==='可转债'?'转债':c;if(/期货/.test(str(r._variety||r['交易品种'])))return'期货';if(/基金/.test(str(r._variety||r['交易品种'])))return'基金';return['信用债','利率债'].includes(str(r._cat))?str(r._cat):'其他';};
-  const holdingCategory = (h,kind) => {if(kind==='funds')return h.kind==='REITs'?'REITs':/ETF|基金/.test(str(h.kind))?'基金':'其他';if(h.assetType==='资产证券化产品'||ABS.has(h.bondType))return'ABS';if(['可转债','可交换债'].includes(h.bondType))return'转债';return RATE.has(h.bondType)?'利率债':h.bondType?'信用债':'其他';};
+  const holdingCategory = (h,kind) => {if(kind==='funds')return /REIT/i.test(str(h.kind)+' '+str(h.name))?'REITs':/ETF|基金/.test(str(h.kind))?'基金':str(h.kind)==='资产管理计划'?'资管计划':'其他';if(h.assetType==='资产证券化产品'||ABS.has(h.bondType))return'ABS';if(['可转债','可交换债'].includes(h.bondType))return'转债';return RATE.has(h.bondType)?'利率债':h.bondType?'信用债':'其他';};
   const theme = name => {const s=str(name);for(const [re,label]of [[/科创债/,'科创债类'],[/城投债/,'城投债类'],[/可转债|转债/,'转债类'],[/公司债/,'公司债类'],[/信用债/,'信用债类'],[/短融|短债/,'短债类'],[/国债/,'国债类'],[/政金债|政策性金融债|国开债/,'政金债类'],[/红利/,'红利类'],[/黄金/,'黄金类'],[/半导体|芯片/,'半导体类'],[/医药|医疗/,'医药类'],[/沪深300|中证500|中证1000|A500|上证50|科创50|创业板指/,'宽基股票类'],[/恒生|港股/,'港股类']])if(re.test(s))return label;return'其他主题';};
   function flowTerm(raw,fallback){const s=str(raw);let m=s.match(/^(\d+(?:\.\d+)?)[-~—至](\d+(?:\.\d+)?)年/);if(m)return{min:Number(m[1]),max:Number(m[2]),source:'流水期限'};m=s.match(/^(\d+(?:\.\d+)?)年/);if(m)return{min:/以内|以下/.test(s)?0:Number(m[1]),max:/以上|\+/.test(s)?Infinity:Number(m[1]),source:'流水期限'};m=s.match(/^(\d+(?:\.\d+)?)[月]/);if(m)return{min:Number(m[1])/12,max:Number(m[1])/12,source:'流水期限'};m=s.match(/^(\d+(?:\.\d+)?)[日天]/);if(m)return{min:Number(m[1])/365,max:Number(m[1])/365,source:'流水期限'};return fallback>0?{min:fallback,max:fallback,source:'本次期末剩余期限映射'}:null;}
   function termConcentration(items){const total=sum(items,h=>h.yi);for(const [label,test]of [['0—1年',t=>t>=0&&t<1],['1—3年',t=>t>=1&&t<3],['3—5年',t=>t>=3&&t<5],['5—7年',t=>t>=5&&t<7],['7年以上',t=>t>=7],['0—3年',t=>t>=0&&t<3],['0—5年',t=>t>=0&&t<5]]){const value=sum(items.filter(h=>h.remain!=null&&h.remain>0&&test(h.remain)),h=>h.yi);if(ratio(value,total)>=RULES.concentrated)return{label,value,share:ratio(value,total)};}return null;}
@@ -2567,10 +2567,10 @@ const AccountNarrative = (() => {
       const twoWay=[...bySecurity.values()].filter(g=>g.some(r=>BUY.has(r.direction))&&g.some(r=>SELL.has(r.direction)));
       const dateGroups=new Map();for(const r of rows){const k=r.key+'|'+r.date;if(!dateGroups.has(k))dateGroups.set(k,[]);dateGroups.get(k).push(r);}
       const sameDay=[...dateGroups.values()].filter(g=>g.some(r=>BUY.has(r.direction))&&g.some(r=>SELL.has(r.direction))),sellThenBuy=sameDay.filter(g=>g.some(s=>SELL.has(s.direction)&&s.time&&g.some(b=>BUY.has(b.direction)&&b.time&&s.time<b.time)));
-      const sells=rows.filter(r=>SELL.has(r.direction));let shortYi=0,knownYi=0,oneTwoYi=0,sameDayYi=0,primaryYi=0,openingYi=0,unmatchedYi=0,pairedSales=0;
-      for(const r of sells){const p=pairs.get(r.id);if(!p||!r.qty){unmatchedYi+=r.yi;continue;}shortYi+=r.yi*p.short/r.qty;knownYi+=r.yi*p.secondary/r.qty;oneTwoYi+=r.yi*p.oneTwo/r.qty;sameDayYi+=r.yi*p.sameDay/r.qty;primaryYi+=r.yi*p.primary/r.qty;openingYi+=r.yi*p.opening/r.qty;unmatchedYi+=r.yi*p.unmatched/r.qty;if(p.secondary>0)pairedSales++;}
+      const sells=rows.filter(r=>SELL.has(r.direction));let shortYi=0,knownYi=0,oneTwoYi=0,sameDayYi=0,primaryYi=0,openingYi=0,unmatchedYi=0,pairedSales=0,holdingDaysYi=0;
+      for(const r of sells){const p=pairs.get(r.id);if(!p||!r.qty){unmatchedYi+=r.yi;continue;}shortYi+=r.yi*p.short/r.qty;knownYi+=r.yi*p.secondary/r.qty;oneTwoYi+=r.yi*p.oneTwo/r.qty;sameDayYi+=r.yi*p.sameDay/r.qty;primaryYi+=r.yi*p.primary/r.qty;openingYi+=r.yi*p.opening/r.qty;unmatchedYi+=r.yi*p.unmatched/r.qty;holdingDaysYi+=r.yi*p.knownDaysWeight/r.qty;if(p.secondary>0)pairedSales++;}
       const amountYi=sum(rows,r=>r.yi),sellYi=sum(sells,r=>r.yi),buyYi=sum(rows.filter(r=>BUY.has(r.direction)),r=>r.yi),days=unique(rows.map(r=>r.date).filter(Boolean)).length;
-      return{name,rows,amountYi,share:ratio(amountYi,total),count:rows.length,countShare:ratio(rows.length,trades.length),buyYi,sellYi,netYi:buyYi-sellYi,securities:bySecurity.size,days,medianWan:median(rows.map(r=>r.yi*1e4)),twoWayShare:ratio(sum(twoWay.flat(),r=>r.yi),amountYi),longShare:ratio(sum(rows.filter(r=>r.term&&r.term.min>=7),r=>r.yi),amountYi),sameDayPairs:sameDay.length,sameDayDates:unique(sameDay.map(g=>g[0].date)).length,sellThenBuy:sellThenBuy.length,shortYi,knownYi,oneTwoYi,sameDayYi,primaryYi,openingYi,unmatchedYi,pairedSales,rolling:!a.duplicates&&days>=3&&rows.length>=6&&twoWay.length>=1&&(ratio(shortYi,sellYi)>=.6&&pairedSales>=3||twoWay.length>=2&&ratio(sum(twoWay.flat(),r=>r.yi),amountYi)>=.6),smallMany:rows.length>=RULES.minManyCount&&days>=3&&ratio(amountYi,total)<=RULES.smallAmount&&ratio(rows.length,trades.length)>=RULES.manyCount&&(median(rows.map(r=>r.yi*1e4))||Infinity)<=RULES.smallMedianWan};
+      return{name,rows,amountYi,share:ratio(amountYi,total),count:rows.length,countShare:ratio(rows.length,trades.length),buyYi,sellYi,netYi:buyYi-sellYi,securities:bySecurity.size,days,medianWan:median(rows.map(r=>r.yi*1e4)),twoWayShare:ratio(sum(twoWay.flat(),r=>r.yi),amountYi),longShare:ratio(sum(rows.filter(r=>r.term&&r.term.min>=7),r=>r.yi),amountYi),sameDayPairs:sameDay.length,sameDayDates:unique(sameDay.map(g=>g[0].date)).length,sameDayShare:ratio(sum(sameDay.flat(),r=>r.yi),amountYi),sellThenBuy:sellThenBuy.length,shortYi,knownYi,oneTwoYi,sameDayYi,primaryYi,openingYi,unmatchedYi,pairedSales,knownHoldingDays:knownYi>0?holdingDaysYi/knownYi:null,rolling:!a.duplicates&&days>=3&&rows.length>=6&&twoWay.length>=1&&(ratio(shortYi,sellYi)>=.6&&pairedSales>=3||twoWay.length>=2&&ratio(sum(twoWay.flat(),r=>r.yi),amountYi)>=.6),smallMany:rows.length>=RULES.minManyCount&&days>=3&&ratio(amountYi,total)<=RULES.smallAmount&&ratio(rows.length,trades.length)>=RULES.manyCount&&(median(rows.map(r=>r.yi*1e4))||Infinity)<=RULES.smallMedianWan};
     }).sort((x,y)=>y.amountYi-x.amountYi);
     const primary=flows.filter(r=>r.direction==='分销买入'),bondBuys=flows.filter(r=>BUY.has(r.direction)&&!['基金','REITs','期货'].includes(r.category)),bondSells=trades.filter(r=>SELL.has(r.direction)&&!['基金','REITs','期货'].includes(r.category));
     let matchedPrimary=0;for(const r of bondSells){const p=pairs.get(r.id);if(p&&r.qty>0)matchedPrimary+=r.yi*p.primary/r.qty;}
@@ -2588,86 +2588,138 @@ const AccountNarrative = (() => {
     }else{
       text=h.main.length?`持仓以${mainText}为主`:`持仓涉及${mainText}等多个品种`;
       if(h.valid&&names.length===1)text+=`（${amount(main[0].value)}，占${pct(main[0].value,h.total)}%）`;
-      const minor=h.cats.filter(c=>!names.includes(c.name)&&c.value/h.positiveTotal<RULES.minor&&c.name!=='其他').slice(0,2);if(minor.length)text+=`，少量持有${minor.map(c=>c.name).join('和')}`;text+='。';
+      text+='。';
     }
-    const secondary=h.cats.filter(c=>!names.includes(c.name)&&c.value/h.positiveTotal>=RULES.minor&&c.name!=='其他').slice(0,2);if(secondary.length)text=text.replace(/。$/,'')+`，另持有${secondary.map(c=>`${c.name}${h.valid?`（约占${pct(c.value,h.total)}%）`:''}`).join('和')}。`;
+    const secondary=h.cats.filter(c=>!names.includes(c.name)&&c.value/h.positiveTotal>=RULES.minor);if(secondary.length)text=text.replace(/。$/,'')+`，另持有${secondary.map(c=>`${c.name==='其他'?'其他品种':c.name}${h.valid?`（约占${pct(c.value,h.total)}%）`:''}`).join('和')}。`;
+    const minor=h.cats.filter(c=>!names.includes(c.name)&&c.value/h.positiveTotal<RULES.minor);if(minor.length)text=text.replace(/。$/,'')+`，少量持有${minor.map(c=>c.name==='其他'?'其他品种':c.name).join('、')}。`;
     if(names.includes('信用债')){const details=[];if(h.term)details.push(`期限集中在${h.term.label}`);if(h.rateNames.length)details.push(`评级以${h.rateNames.join('、')}为主`);if(details.length)text+=`信用债${details.join('，')}。`;}
     if(names.includes('利率债')&&h.rateTerm)text+=`利率债持仓期限以${h.rateTerm.label}为主。`;
+    if(a.futures.length)text+='另有国债期货持仓。';
     const metrics=[['持仓日期',idx.endDate||'材料未标明'],['识别持仓净市值',amount(h.total)],['构成分母','本次期末债券及基金市值；不使用账户净规模'],...h.cats.map(c=>[c.name,`${amount(c.value)}${h.valid?` / ${pct(c.value,h.total)}%`:''}`])];
     if(h.term)metrics.push(['信用债期限集中度',`${h.term.label}：${pct(h.term.value,h.creditTotal)}%；分母为信用债市值`]);if(h.rateNames.length)metrics.push(['评级来源','中债隐含评级；AA(2)归入AA；未知评级保留在分母']);
     return feature('holdings',text,metrics,a.end,115);
   }
+  function observationMonths(a,idx,month){
+    let from=month?month+'-01':idx.periodStart,to=month?new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).toISOString().slice(0,10):idx.periodEnd;
+    if(idx.periodStart&&idx.periodStart>from)from=idx.periodStart;if(idx.periodEnd&&idx.periodEnd<to)to=idx.periodEnd;
+    if(a.meta.startDate&&a.meta.startDate<=to&&a.meta.startDate>from)from=a.meta.startDate;
+    return from&&to?Math.max(1,(daysBetween(from,to)+1)/30.44):1;
+  }
+  function tradingBehavior(c,a,idx,month,held=false){
+    const monthlyDays=c.days/observationMonths(a,idx,month),frequency=c.count>=24&&c.days>=8&&monthlyDays>=8?'frequent':c.days>=3&&monthlyDays<=3?'low':'regular';
+    const scope=month?'本月':'本期',buyShare=ratio(c.buyYi,c.buyYi+c.sellYi),knownShare=ratio(c.knownYi,c.sellYi);
+    let mode,clause;
+    if(c.buyYi>0&&!c.sellYi){mode=held?'allocation':'buy-only';clause=held?`以买入配置为主，${scope}未见卖出`:`${scope}仅见买入`;}
+    else if(!a.duplicates&&ratio(c.primaryYi,c.sellYi)>=.6){mode='primary-sale';clause='以卖出一级分销取得的仓位为主';if(c.buyYi>0)clause+='，兼有二级买入';}
+    else if(!c.buyYi&&c.sellYi){mode=ratio(c.openingYi,c.sellYi)>=.5?'opening-sale':'sell-only';clause=mode==='opening-sale'?'以卖出期初存量为主':`以卖出为主，${scope}未见买入`;}
+    else if(a.duplicates){mode='mixed';clause='兼有买入和卖出';}
+    else if(c.sameDayDates>=3&&c.sameDayShare>=.5){mode='same-day';clause='以同日双向交易为显著特点';if(frequency==='frequent')clause='频繁开展同日双向交易';}
+    else if(c.rolling&&knownShare>=.6&&c.pairedSales>=3){mode='swing';clause=frequency==='frequent'?'较频繁地进行波段买卖':frequency==='low'?'以较低频的波段买卖为主':'以波段买卖为主';if(ratio(c.shortYi,c.sellYi)>=.6)clause+='，持有周期偏短';else if(c.knownHoldingDays>=20)clause+='，通常持有一段时间后卖出';}
+    else if(c.rolling){mode='two-way';clause=frequency==='frequent'?'双向交易频繁，反复买卖':'同券反复买卖';}
+    else if(buyShare>=.8){mode=held?'allocation':'accumulating';clause=held?'以买入配置为主，兼有少量卖出调整':'以买入为主，卖出相对较少';}
+    else if(buyShare<=.2){mode='reducing';clause='以卖出减持为主，买入较少';}
+    else if(knownShare>=.6&&c.pairedSales>=2&&c.knownHoldingDays>=20){mode='held-sale';clause='持有一段时间后卖出，兼有买入调整';}
+    else{mode='mixed';clause=frequency==='frequent'?'买卖调整较频繁':'兼有买入和卖出调整';}
+    if(mode!=='same-day'&&c.sameDayPairs&&!a.duplicates)clause+=c.sellThenBuy?'，伴有同日卖出后买回的操作':'，伴有同日买卖';
+    return{mode,clause,frequency,monthlyDays,knownShare,buyShare};
+  }
+  function behaviorMetrics(c,a,idx,month){const b=tradingBehavior(c,a,idx,month);return[
+    [c.name+'买入 / 卖出',`${amount(c.buyYi)} / ${amount(c.sellYi)}`],
+    [c.name+'金额 / 笔数',`${amount(c.amountYi)} / ${c.count}笔`],
+    [c.name+'活跃日期',`${c.days}日；折合每月${b.monthlyDays.toFixed(1)}个活跃日`],
+    [c.name+'已知买入来源覆盖',`${pct(c.knownYi,c.sellYi)}%卖出金额可对应二级买入`],
+    [c.name+'已知持有期',c.knownHoldingDays==null?'未知存量不补推购入日':`按卖出金额加权约${c.knownHoldingDays.toFixed(1)}个自然日；只统计已知二级买入日部分`],
+    [c.name+'同日买卖金额覆盖',`${pct(c.sameDayShare,1)}%；同日双向不等同于完整回转或盈利`],
+    ['频率文字标准','较频繁：每月至少8个活跃日、全期至少24笔；较低频：至少3个活跃日且每月不超过3日，仅在已有波段证据时使用']
+  ];}
+  function primaryFeature(a,idx,s){
+    if(!s.primaryYi)return null;
+    let text;if(s.primaryDominant)text=`以一级分销买入、二级市场卖出为主要交易方式，分销买入${amount(s.primaryYi)}、二级卖出${amount(s.bondSellYi)}。`;else if(!s.sell&&s.primaryShare>=.6)text=`本期主要参与一级分销买入，累计${amount(s.primaryYi)}，尚未见二级卖出。`;else text=`另有一级分销买入${amount(s.primaryYi)}${s.matchedPrimary>0?'，部分随后在二级市场卖出':''}。`;
+    return feature('primary',text,[['分销买入',`${amount(s.primaryYi)} / ${s.primary.length}笔`],['分销占债券买入',`${pct(s.primaryShare,1)}%（不含基金、REITs、期货买入）`],['数量匹配后的二级卖出',amount(s.matchedPrimary)],['匹配方法','按数量分配卖出来源；期初存量不编造购入日']],sourceRecords(a,idx,s.flows.filter(r=>r.direction==='分销买入'||SELL.has(r.direction))),100);
+  }
   function selectFeatures(a,idx,h,s){
-    const candidates=[],hf=holdingFeature(a,idx,h);if(hf)candidates.push(hf);
-    const tradeMetrics=[['交易期间',s.month?monthLabel(s.month):`${idx.periodStart}至${idx.periodEnd}`],['常规交易金额',amount(s.total)],['常规交易笔数',`${s.trades.length}笔`],['金额口径','现券买卖、基金买卖、国债期货；买卖累计，回购和分销另列']];
-    const credit=s.categories.find(c=>c.name==='信用债'),rate=s.categories.find(c=>c.name==='利率债'),fund=s.categories.find(c=>c.name==='基金');
-    if(s.primaryYi>0){let text;if(s.primaryDominant)text=`以一级分销买入、二级市场卖出为主要交易方式，分销买入${amount(s.primaryYi)}、二级卖出${amount(s.bondSellYi)}。`;else if(!s.sell&&s.primaryShare>=.6)text=`本期主要参与一级分销买入，累计${amount(s.primaryYi)}，尚未见二级卖出。`;else text=`另有一级分销买入${amount(s.primaryYi)}${s.matchedPrimary>0?'，部分随后在二级市场卖出':''}。`;
-      candidates.push(feature('primary',text,[['分销买入',`${amount(s.primaryYi)} / ${s.primary.length}笔`],['分销占债券买入',`${pct(s.primaryShare,1)}%（不含基金、REITs、期货买入）`],['数量匹配后的二级卖出',amount(s.matchedPrimary)],['匹配方法','同账户、同证券及市场，按日期及可用成交时间匹配数量；期初存量不编造购入日']],sourceRecords(a,idx,s.flows.filter(r=>r.direction==='分销买入'||SELL.has(r.direction))),s.primaryDominant?120:65));
-    }
-    if(credit&&rate&&h.cats[0]?.name==='信用债'&&ratio(h.cats[0].value,h.positiveTotal)>=.6&&rate.rolling&&rate.share>=.1){
-      const creditText=credit.buyYi>credit.sellYi?'信用债以买入配置及调仓为主':'信用债兼有买卖调仓';
-      candidates.push(feature('credit-rate',`${creditText}，利率债${ratio(rate.shortYi,rate.sellYi)>=.6?'以波段买卖为主':'反复买卖'}，约占${pct(rate.amountYi,s.total)}%交易额。`,[...tradeMetrics,['信用债买入 / 卖出',`${amount(credit.buyYi)} / ${amount(credit.sellYi)}`],['利率债交易',`${amount(rate.amountYi)} / ${rate.count}笔`],['利率债同券双向交易金额覆盖',`${Math.round(rate.twoWayShare*100)}%`]],credit.rows.concat(rate.rows),110));
-    }else if(fund&&fund.share>=.6){
-      const label=fund.rows.every(r=>/ETF/i.test(r.name))?(fund.rows.every(r=>/债|短融/.test(r.name))?'债券ETF':'ETF'):'基金';
-      let text;if(!fund.sellYi)text=`${label}交易以买入配置为主，本期未见卖出。`;else if(fund.rolling)text=`以${fund.securities>1?'多只':''}${label}的滚动买卖为主。`;else text=`${label}${fund.buyYi>0?'兼有买入和卖出':'以卖出为主'}。`;
-      if(fund.sellThenBuy)text=text.replace(/。$/,'，兼有同日卖出后买回的操作。');else if(fund.sameDayPairs)text=text.replace(/。$/,'，兼有同日买卖。');
-      const other=s.categories.filter(c=>c.name!=='基金'&&c.share>=RULES.minor).slice(0,2);if(other.length)text+=`另有${other.map(c=>`${c.name}交易（约占${pct(c.amountYi,s.total)}%）`).join('和')}。`;
-      candidates.push(feature('fund-trading',text,[...tradeMetrics,['基金买入 / 卖出',`${amount(fund.buyYi)} / ${amount(fund.sellYi)}`],['同一基金同日双向交易',`${fund.sameDayPairs}个证券日期组合，涉及${fund.sameDayDates}个日期`],['已匹配1至2日持有的卖出金额',amount(fund.oneTwoYi)]],sourceRecords(a,idx,fund.rows),95));
-    }else if(s.total>0&&!s.primaryDominant){
-      const main=s.main.length?s.main.map(c=>c.name):s.categories.slice(0,2).map(c=>c.name);let text=`交易${s.main.length?'以':'涉及'}${main.join('和')}${s.main.length?'为主':'等品种'}`;
-      const c=s.categories[0];if(c?.share>=.6)text+=`（约占${pct(c.amountYi,s.total)}%交易额）`;
-      const other=s.categories.filter(c=>!main.includes(c.name)&&c.share>=RULES.minor).slice(0,2);if(other.length)text+=`，兼有${other.map(c=>c.name).join('和')}交易`;
-      if(c&&c.buyYi>0&&!c.sellYi)text+='，以买入为主';else if(c&&!c.buyYi&&c.sellYi)text+='，以卖出为主';else if(c?.rolling)text+='，同券反复买卖';text+='。';
-      candidates.push(feature('main-trading',text,[...tradeMetrics,...s.categories.map(c=>[c.name,`${amount(c.amountYi)} / ${c.count}笔；买入${amount(c.buyYi)}，卖出${amount(c.sellYi)}`])],s.trades,85));
-    }
-    for(const c of s.categories.filter(c=>c.smallMany))candidates.push(feature('small-'+c.name,`${c.name}${c.securities>=10?'参与面较广，':'以小额多笔交易为特点，'}笔数约占${pct(c.count,s.trades.length)}%，金额${c.share*100<.1?smallPercent(c.share*100):'仅占'+smallPercent(c.share*100)}，单笔金额中位数约${c.medianWan.toFixed(c.medianWan<10?1:0)}万元。`,[...tradeMetrics,['该品种交易',`${c.count}笔 / ${c.securities}只 / ${amount(c.amountYi)}`],['单笔中位数',`${c.medianWan.toFixed(2)}万元`],['小额多笔条件','至少10笔及3个交易日；金额≤5%，笔数≥20%，单笔中位数≤100万元']],c.rows,105));
-    if(rate?.rolling&&h.cats[0]?.name!=='信用债'&&rate.share<.6)candidates.push(feature('rate-trading',`另有利率债滚动买卖${h.cats.some(c=>c.name==='利率债')?'':'，期末未见利率债持仓'}。`,[['利率债交易',`${amount(rate.amountYi)} / ${rate.count}笔`],['买入 / 卖出',`${amount(rate.buyYi)} / ${amount(rate.sellYi)}`]],rate.rows,65));
-    if(rate&&rate.longShare>=.7&&rate.count>=3)candidates.push(feature('long-rate',`${h.rateTerm&&h.rateTerm.label!=='7年以上'?`利率债持仓偏${h.rateTerm.label}，交易侧`:'利率债交易'}主要涉及7年以上长端品种${rate.rolling?'，并有反复买卖':''}。`,[['长端成交金额占比',`${Math.round(rate.longShare*100)}%`],['期限来源','优先流水期限；缺失时参考本次期末剩余期限，不作为历史成交久期'],['文字长端口径','7年及以上；不修改现有9年图表/标签阈值']],rate.rows,90));
-    const heldFunds=h.cats.find(c=>c.name==='基金');if(heldFunds&&(!fund||fund.count<=3)&&!candidates.some(c=>c.key==='fund-trading'))candidates.push(feature('fund-holding','另有基金持仓，期间买卖较少。',[['基金持仓',amount(heldFunds.value)],['基金期间交易',`${fund?.count||0}笔`]],a.end.filter(r=>r.category==='基金').concat(fund?.rows||[]),45));
-    const strategy=str(a.meta.strategy?.cat2);if(/转债/.test(strategy)&&!s.categories.some(c=>c.name==='其他'&&c.share>.1)&&(s.categories.find(c=>c.name==='转债')?.share||0)<.05&&(h.cats.find(c=>c.name==='转债')?.value||0)/Math.max(h.positiveTotal,1e-12)<.1&&s.total>0)candidates.push(feature('official','策略表归类转债策略，实际持仓和交易金额主要集中在其他品种。',[['官方二级策略',strategy],['核对范围','仅描述本次材料中的实际参与，不作合规或业绩评价']],a.end.concat(s.trades),55));
-    if(!s.total&&!s.primaryYi&&s.repo.length){const rg=groups(s.repo,r=>r.direction,r=>r.yi),first=rg[0];candidates.push(feature('repo',`本期以${first?.name||'回购'}操作为主，回购累计${amount(sum(s.repo,r=>r.yi))}、${s.repo.length}笔。`,[['回购金额口径','回购单独累计，不与现券持仓比例混算'],...rg.map(g=>[g.name,amount(g.value)])],s.repo,110));}
-    if(!s.total&&!s.primaryYi&&h.positive.length)candidates.push(feature('no-trading','本期未见常规交易记录，以持仓观察为主。',[['常规交易记录','0笔（按本次导入期间）']],a.end,35));
-    if(!s.total&&!s.primaryYi&&!s.repo.length&&!h.positive.length&&s.last)candidates.push(feature('scale-only',`本期有规模报送，最近报送规模${amount(s.last.sizeYi)}；未见证券持仓明细和交易记录。`,[['最近报送日',s.last.date],['账户规模',amount(s.last.sizeYi)]],s.positions,70));
-    if(a.futures.length&&!candidates.some(c=>c.text.includes('期货')))candidates.push(feature('futures','另有国债期货持仓。',[['口径','合约手数及保证金单列，不加入债券与基金持仓市值分母']],a.futures,55));
-    candidates.sort((x,y)=>y.priority-x.priority);let chosen=[],length=0;for(const f of candidates){if(chosen.length>=4)break;if(chosen.length&&length+f.text.length>240)continue;chosen.push(f);length+=f.text.length;}
-    if(!chosen.length)chosen=[feature('empty','本次材料中未见可分析的交易或持仓记录。',[],[])];
+    const chosen=[],hf=holdingFeature(a,idx,h);if(hf)chosen.push(hf);
+    const pf=primaryFeature(a,idx,s);if(pf)chosen.push(pf);
+    if(s.total>0){
+      const main=s.main.length?s.main.map(c=>c.name):s.categories.slice(0,2).map(c=>c.name),top=s.categories[0];
+      let text=`${s.primaryYi?'常规交易':'交易'}${s.main.length?'以':'涉及'}${main.join('和')}${s.main.length?'为主':'等品种'}`;if(main.length===1&&top.share>=.6)text+=`（约占${pct(top.amountYi,s.total)}%交易额）`;text+='。';
+      const lines=[],metrics=[['常规交易金额',amount(s.total)],['金额口径','现券买卖、基金买卖、国债期货；买卖累计，回购和分销另列']],rows=[];
+      for(const c of s.categories){
+        const held=h.cats.some(x=>x.name===c.name),b=tradingBehavior(c,a,idx,null,held);
+        let line=`${c.name}${b.clause}`;
+        if(c.smallMany)line+=`，以小额多笔参与，金额${c.share<.001?'不足0.1%':'仅占'+smallPercent(c.share*100)}`;
+        if(c.name==='利率债'&&c.longShare>=.7&&c.count>=3)line+=`，成交集中于7年以上长端品种`;
+        lines.push(line);metrics.push(...behaviorMetrics(c,a,idx,null));rows.push(...c.rows);
+      }
+      const heldOnly=h.cats.filter(x=>!s.categories.some(c=>c.name===x.name)&&!s.flows.some(f=>f.category===x.name&&(BUY.has(f.direction)||SELL.has(f.direction))));
+      if(heldOnly.length)lines.push(`${heldOnly.map(c=>c.name).join('、')}以持有为主，期间未见买卖`);
+      text+=lines.join('；')+'。';
+      const credit=s.categories.find(c=>c.name==='信用债'),rate=s.categories.find(c=>c.name==='利率债'),fund=s.categories.find(c=>c.name==='基金');
+      const key=credit&&rate&&h.cats[0]?.name==='信用债'&&rate.rolling?'credit-rate':fund?.share>=.6?'fund-trading':'main-trading';
+      chosen.push(feature(key,text,metrics,sourceRecords(a,idx,rows).concat(a.end),90));
+    }else if(!s.primaryYi&&s.repo.length){const rg=groups(s.repo,r=>r.direction,r=>r.yi);chosen.push(feature('repo',`本期以${rg[0]?.name||'回购'}操作为主，回购累计${amount(sum(s.repo,r=>r.yi))}。`,[['回购口径','单独累计，不加入常规交易金额'],...rg.map(g=>[g.name,amount(g.value)])],s.repo,80));}
+    else if(!s.primaryYi&&h.positive.length)chosen.push(feature('no-trading','各类证券以持有为主，本期未见常规买卖。',[['观察范围','本次导入的完整期间']],a.end,40));
+    if(!s.total&&!s.primaryYi&&!s.repo.length&&!h.positive.length&&s.last)chosen.push(feature('scale-only',`本期有规模报送，最近报送规模${amount(s.last.sizeYi)}；未见证券持仓明细和交易记录。`,[['最近报送日',s.last.date]],s.positions,60));
+    const strategy=str(a.meta.strategy?.cat2);if(/转债/.test(strategy)&&!s.categories.some(c=>c.name==='其他'&&c.share>.1)&&(s.categories.find(c=>c.name==='转债')?.share||0)<.05&&(h.cats.find(c=>c.name==='转债')?.value||0)/Math.max(h.positiveTotal,1e-12)<.1&&s.total>0)chosen.push(feature('official','策略表归类转债策略，实际持仓和交易金额主要集中在其他品种。',[['官方二级策略',strategy]],a.end.concat(s.trades),30));
+    if(a.futures.length&&!hf)chosen.push(feature('futures','另有国债期货持仓。',[['口径','合约手数及保证金单列']],a.futures,50));
+    if(!chosen.length)chosen.push(feature('empty','本次材料中未见可分析的交易或持仓记录。',[],[]));
     return chosen;
   }
   function qualityEvidence(a,idx,h,s){const endScope=!s.month||s.month===idx.endDate.slice(0,7),rows=s.quality.concat(endScope&&(h.negative.length||h.balanceMismatch)?a.end:[]);return[feature('quality','取数提示及对应原始记录。',[['规则处理','沿用既有过滤与提醒；文字不会自动恢复被过滤记录'],['过滤记录',`${s.quality.filter(q=>q.level==='过滤').length}条`],['提醒记录',`${s.quality.filter(q=>q.level==='提醒').length}条`],['规则',unique(s.quality.map(q=>q.rule)).join('、')||'持仓核对']],rows)];}
   function overview(idx,code){const cacheKey='all|'+code;if(idx.cache.has(cacheKey))return idx.cache.get(cacheKey);const a=idx.accounts.get(code);if(!a)return null;const h=holdings(a,idx),s=statistics(a,idx,null),features=selectFeatures(a,idx,h,s),start=a.meta.startDate||'';const future=start&&idx.periodEnd&&start>idx.periodEnd;const r={code,name:a.name,startDate:start,startLabel:start?(future?(a.flows.length?'起始日期待核对':'尚未进入观察期'):`${Number(start.slice(0,4))}年${start.slice(0,4)===idx.periodEnd.slice(0,4)?Number(start.slice(5,7))+'月新户':'启用'}`):'',features,evidenceFeatures:qualityEvidence(a,idx,h,s),text:features.map(f=>f.text).join(''),holding:h,stats:s,flags:flags(a,idx,h,s)};idx.cache.set(cacheKey,r);return r;}
   function flags(a,idx,h,s){const f=[],endScope=!s.month||s.month===idx.endDate.slice(0,7);if(endScope&&h.negative.length)f.push('期末持仓存在负市值，构成比例未强行归一');if(endScope&&h.balanceMismatch)f.push('期末识别市值超过同日资产总值，持仓金额需核对');if(a.duplicates)f.push('本次导入期间存在重复交易编号，未据此推断交易频繁程度');const filtered=s.quality.filter(q=>q.level==='过滤');if(filtered.length)f.push(`${filtered.length}条记录按现有规则过滤`);if(s.categories.some(c=>c.name==='其他'&&c.amountYi>0))f.push('部分交易品种尚未识别');return f;}
+  function monthlyChanges(a,idx,month,s,previous){
+    const out=[];if(!previous.total)return out;const rows=s.trades.concat(previous.trades),scope=[['比较月份',`${prevMonth(month)} → ${month}`],['口径','相邻自然月；品种占比以各月常规交易金额为分母']];
+    for(const name of unique([...previous.categories,...s.categories].map(c=>c.name))){const old=previous.categories.find(c=>c.name===name),now=s.categories.find(c=>c.name===name);scope.push([name+' 上月金额 / 占比',`${amount(old?.amountYi||0)} / ${pct(old?.share||0,1)}%`],[name+' 本月金额 / 占比',`${amount(now?.amountYi||0)} / ${pct(now?.share||0,1)}%`],[name+' 上月买入 / 卖出',`${amount(old?.buyYi||0)} / ${amount(old?.sellYi||0)}`],[name+' 本月买入 / 卖出',`${amount(now?.buyYi||0)} / ${amount(now?.sellYi||0)}`]);}
+    const before=previous.categories[0],after=s.categories[0];
+    if(after&&before.name!==after.name&&before.share>=.4&&after.share>=.4&&(after.share-(previous.categories.find(c=>c.name===after.name)?.share||0))>=.1){
+      out.push(feature('category-change',`交易重心由上月${before.name}转向本月${after.name}；${after.name}成交占比由${pct(previous.categories.find(c=>c.name===after.name)?.share||0,1)}%升至${pct(after.share,1)}%。`,scope.concat([['上月主品种',`${before.name} / ${pct(before.share,1)}%`],['本月主品种',`${after.name} / ${pct(after.share,1)}%`]]),rows,100));
+    }else{
+      const shifts=s.categories.map(c=>({c,old:previous.categories.find(p=>p.name===c.name)})).filter(x=>x.c.share>=.1&&Math.abs(x.c.share-(x.old?.share||0))>=.15).sort((x,y)=>Math.abs(y.c.share-(y.old?.share||0))-Math.abs(x.c.share-(x.old?.share||0))).slice(0,2);
+      if(shifts.length)out.push(feature('category-change',shifts.map(({c,old})=>`${c.name}成交占比由上月${pct(old?.share||0,1)}%${c.share>(old?.share||0)?'升至':'降至'}${pct(c.share,1)}%`).join('，')+'。',scope,rows,95));
+    }
+    const inactive=previous.categories.filter(p=>p.share>=.2&&!s.flows.some(r=>r.category===p.name&&(BUY.has(r.direction)||SELL.has(r.direction))));if(inactive.length)out.push(feature('inactive-change',`上月参与较多的${inactive.map(c=>c.name).join('、')}本月未见买卖。`,scope,rows,90));
+    const labels={'allocation':'买入配置','buy-only':'单向买入','accumulating':'以买入为主','same-day':'同日双向交易','swing':'波段买卖','two-way':'反复买卖','primary-sale':'卖出一级分销取得的仓位','opening-sale':'卖出期初存量','sell-only':'以卖出为主','reducing':'卖出减持','held-sale':'持有后卖出','mixed':'双向调整'};
+    const patterns=[],directions=[];
+    for(const c of s.categories){
+      const old=previous.categories.find(p=>p.name===c.name);if(!old)continue;
+      const nowMode=tradingBehavior(c,a,idx,month),oldMode=tradingBehavior(old,a,idx,prevMonth(month));
+      if(nowMode.mode!==oldMode.mode&&c.days>=3&&c.count>=6&&(['same-day','swing','two-way'].includes(nowMode.mode)||['same-day','swing','two-way'].includes(oldMode.mode))){patterns.push(`${c.name}由上月的${labels[oldMode.mode]}转为本月的${labels[nowMode.mode]}`);}
+      else if(nowMode.mode===oldMode.mode&&['same-day','swing','two-way'].includes(nowMode.mode)&&nowMode.frequency!==oldMode.frequency&&c.days>=3&&old.days>=3&&Math.max(nowMode.monthlyDays,oldMode.monthlyDays)>=8&&Math.max(nowMode.monthlyDays,oldMode.monthlyDays)>=Math.min(nowMode.monthlyDays,oldMode.monthlyDays)*2){patterns.push(`${c.name}延续${labels[nowMode.mode]}，交易活跃度较上月${nowMode.monthlyDays>oldMode.monthlyDays?'提高':'下降'}`);}
+      if(c.netYi*old.netYi<0&&Math.abs(c.netYi)/c.amountYi>=.2&&Math.abs(old.netYi)/old.amountYi>=.2&&Math.max(c.share,old.share)>=.15)directions.push(`${c.name}由上月净${old.netYi>0?'买入':'卖出'}${amount(Math.abs(old.netYi))}转为本月净${c.netYi>0?'买入':'卖出'}${amount(Math.abs(c.netYi))}`);
+    }
+    if(patterns.length)out.push(feature('pattern-change',patterns.slice(0,2).join('；')+'。',scope.concat(s.categories.flatMap(c=>behaviorMetrics(c,a,idx,month).map(([k,v])=>[month+' '+k,v])),previous.categories.flatMap(c=>behaviorMetrics(c,a,idx,prevMonth(month)).map(([k,v])=>[prevMonth(month)+' '+k,v]))),sourceRecords(a,idx,rows),90));
+    if(directions.length)out.push(feature('direction-change',directions.slice(0,2).join('；')+'。',scope,rows,80));
+    const start=a.meta.startDate||'';if(s.total&&idx.periodStart.slice(0,7)<month&&(!start||start<prevMonth(month)+'-01')){const change=s.total/previous.total-1;if(Math.abs(change)>=.3)out.push(feature('trade-change',`常规交易金额较上月${change>0?'增加':'减少'}${Math.abs(change*100).toFixed(1)}%。`,scope.concat([['本月 / 上月',`${amount(s.total)} / ${amount(previous.total)}`]]),rows,70));}
+    return out;
+  }
   function monthly(idx,code,month,extra={}){
-    const a=idx.accounts.get(code);if(!a)return null;const s=statistics(a,idx,month),h=holdings(a,idx),features=[];
+    const a=idx.accounts.get(code);if(!a)return null;const s=statistics(a,idx,month),h=holdings(a,idx),features=[],endScope=idx.endDate.slice(0,7)===month;
     const scopeMetrics=[['统计月份',monthLabel(month)],['交易口径','现券买卖、基金买卖、国债期货，买卖累计；分销及回购另列']];
     const start=a.meta.startDate||'';if(start.slice(0,7)===month)features.push(feature('inception',`账户于${dateLabel(start)}启用。`,[['日期来源',a.meta.startSource||'账户资料']],[...a.meta.startRecord?[a.meta.startRecord]:[]],115));
-    if(s.total){const top=s.categories.slice(0,3);features.push(feature('monthly-total',`本月常规交易${amount(s.total)}、${s.trades.length}笔，${top.map(c=>`${c.name}${amount(c.amountYi)}（${pct(c.amountYi,s.total)}%）`).join('，')}。`,[...scopeMetrics,['交易总金额',amount(s.total)],['买入 / 卖出',`${amount(s.buy)} / ${amount(s.sell)}`]],s.trades,110));}
-    if(s.primaryYi){const detail=selectFeatures(a,idx,h,s).find(f=>f.key==='primary');if(detail)features.push(detail);}
-    const main=s.categories.filter(c=>c.share>=.1||c.countShare>=.3||h.main.some(x=>x.name===c.name)).slice(0,4);
-    for(const c of main){
-      let text=`${c.name}买入${amount(c.buyYi)}、卖出${amount(c.sellYi)}`;if(Math.abs(c.netYi)>.0001)text+=`，净${c.netYi>0?'买入':'卖出'}${amount(Math.abs(c.netYi))}`;text+='。';
-      if(c.rolling)text+=ratio(c.shortYi,c.sellYi)>=.6?'以波段买卖为主。':'同券反复买卖。';
-      if(c.name==='利率债'&&c.longShare>=.7)text+=`本月约${Math.round(c.longShare*100)}%成交涉及7年以上长端品种。`;
-      if(c.sellThenBuy)text+=`出现${c.sellThenBuy}个同券同日卖出后买回的组合。`;else if(c.sameDayPairs)text+=`出现${c.sameDayPairs}个同券同日双向交易组合。`;
-      if(c.smallMany)text+=`涉及${c.securities}只，单笔中位数${c.medianWan.toFixed(2)}万元，体现小额多笔特点。`;
-      if(c.primaryYi>0&&!s.primaryDominant)text+=`其中约${amount(c.primaryYi)}卖出可对应此前分销买入。`;
-      if(c.openingYi>0&&!c.buyYi)text+='卖出包含期初存量，购入日不由本期材料补推。';
-      if(c.name==='基金'){const th=groups(c.rows,r=>theme(r.name),r=>r.yi).filter(t=>t.name!=='其他主题').slice(0,2);if(th.length&&ratio(sum(th,t=>t.value),c.amountYi)>=.7)text+=`基金成交主要集中在${th.map(t=>`${t.name}（${pct(t.value,c.amountYi)}%）`).join('和')}。`;}
-      features.push(feature('monthly-'+c.name,text,[...scopeMetrics,['该品种金额 / 笔数',`${amount(c.amountYi)} / ${c.count}笔`],['成交金额差',`买入${amount(c.buyYi)}－卖出${amount(c.sellYi)}`],['已知买入日的卖出匹配金额',amount(c.knownYi)],['可对应分销的卖出',amount(c.primaryYi)],['来源未匹配的卖出金额',amount(c.unmatchedYi)]],sourceRecords(a,idx,c.rows),95));
+    if(s.total){const top=s.categories.slice(0,3);features.push(feature('monthly-total',`本月常规交易${amount(s.total)}，${top.map(c=>`${c.name}${amount(c.amountYi)}（${pct(c.amountYi,s.total)}%）`).join('，')}。`,scopeMetrics.concat([['交易总金额',amount(s.total)],['买入 / 卖出',`${amount(s.buy)} / ${amount(s.sell)}`]]),s.trades,110));}
+    const previous=statistics(a,idx,prevMonth(month)),changes=monthlyChanges(a,idx,month,s,previous);features.push(...changes);
+    const pf=primaryFeature(a,idx,s);if(pf)features.push(pf);
+    for(const c of s.categories){
+      const behavior=tradingBehavior(c,a,idx,month,endScope&&h.cats.some(x=>x.name===c.name));
+      let text=`${c.name}${behavior.clause}。买入${amount(c.buyYi)}、卖出${amount(c.sellYi)}`;if(Math.abs(c.netYi)>.0001)text+=`，净${c.netYi>0?'买入':'卖出'}${amount(Math.abs(c.netYi))}`;text+='。';
+      if(c.name==='利率债'&&c.longShare>=.7)text+=`约${pct(c.longShare,1)}%成交涉及7年以上长端品种。`;
+      if(c.smallMany)text+=`以小额多笔参与为特点，成交金额${c.share<.001?'不足0.1%':'仅占'+smallPercent(c.share*100)}，单笔中位数${c.medianWan.toFixed(c.medianWan<10?1:0)}万元。`;
+      if(c.primaryYi>0&&!s.primaryDominant)text+=`其中${amount(c.primaryYi)}卖出可对应此前分销买入。`;
+      if(c.name==='基金'){const th=groups(c.rows,r=>theme(r.name),r=>r.yi).filter(t=>t.name!=='其他主题').slice(0,2);if(th.length&&ratio(sum(th,t=>t.value),c.amountYi)>=.7)text+=`成交主要集中在${th.map(t=>`${t.name}（${pct(t.value,c.amountYi)}%）`).join('和')}。`;}
+      features.push(feature('monthly-'+c.name,text,scopeMetrics.concat(behaviorMetrics(c,a,idx,month),[['可对应分销的卖出',amount(c.primaryYi)],['可对应期初存量的卖出',amount(c.openingYi)],['来源未匹配的卖出',amount(c.unmatchedYi)]]),sourceRecords(a,idx,c.rows),95));
     }
-    const previous=statistics(a,idx,prevMonth(month));
-    if(previous.total>0&&s.total>0&&idx.periodStart.slice(0,7)<month&&(!start||start<prevMonth(month)+'-01')){
-      const change=s.total/previous.total-1;if(Math.abs(change)>=.3)features.push(feature('trade-change',`常规交易金额较上月${change>0?'增加':'减少'}${Math.abs(change*100).toFixed(1)}%。`,[['本月 / 上月',`${amount(s.total)} / ${amount(previous.total)}`],['公式','本月交易金额÷上月交易金额－1；不跨缺报月份比较']],s.trades.concat(previous.trades),70));
-      const before=previous.categories[0],after=s.categories[0];if(before&&after&&before.name!==after.name&&before.share>=.6&&after.share>=.6)features.push(feature('category-change',`交易重心由上月${before.name}转为${after.name}。`,[['上月主品种',`${before.name} / ${Math.round(before.share*100)}%`],['本月主品种',`${after.name} / ${Math.round(after.share*100)}%`]],s.trades.concat(previous.trades),85));
-    }
-    if(s.last){let text=`本月最后报送日${dateLabel(s.last.date)}，账户规模${amount(s.last.sizeYi)}`;if(s.prior&&s.prior.sizeYi>0){const ch=s.last.sizeYi/s.prior.sizeYi-1;text+=`，较上月最后报送规模${ch>=0?'增加':'减少'}${Math.abs(ch*100).toFixed(1)}%`;}text+='。';features.push(feature('scale',text,[['本月规模日期',s.last.date],['上月规模日期',s.prior?.date||'无可比记录'],['规模口径','规模表账户净规模；与持仓市值及买卖金额差分别观察']],[s.last,...s.prior?[s.prior]:[]],65));}
-    if(idx.endDate.slice(0,7)===month&&h.positive.length){const f=holdingFeature(a,idx,h);f.key='monthly-holdings';f.text=`截至${dateLabel(idx.endDate)}，${f.text.replace(/^持仓/,'持仓')}`;features.push(f);}
-    if(s.repo.length)features.push(feature('monthly-repo',`回购累计${amount(sum(s.repo,r=>r.yi))}、${s.repo.length}笔，其中${groups(s.repo,r=>r.direction,r=>r.yi).map(g=>`${g.name}${amount(g.value)}`).join('、')}。`,[['回购统计','独立于常规交易金额']],s.repo,40));
-    if(!s.total&&!s.primaryYi&&!s.repo.length)features.unshift(feature('monthly-empty','本月导入记录中未见常规交易、分销或回购。',[...scopeMetrics],[],30));
+    if(s.last){let text=`本月最后报送日${dateLabel(s.last.date)}，账户规模${amount(s.last.sizeYi)}`;if(s.prior&&s.prior.sizeYi>0){const ch=s.last.sizeYi/s.prior.sizeYi-1;text+=`，较上月最后报送规模${ch>=0?'增加':'减少'}${Math.abs(ch*100).toFixed(1)}%`;}text+='。';features.push(feature('scale',text,[['本月规模日期',s.last.date],['上月规模日期',s.prior?.date||'无可比记录'],['规模口径','规模表账户净规模；不以买卖金额差直接推算资金流入流出']],[s.last,...s.prior?[s.prior]:[]],65));}
+    if(endScope&&h.positive.length){const f=holdingFeature(a,idx,h);f.key='monthly-holdings';f.text=`截至${dateLabel(idx.endDate)}，${f.text}`;const heldOnly=h.cats.filter(c=>!s.flows.some(r=>r.category===c.name));if(heldOnly.length)f.text+=`期末持有的${heldOnly.map(c=>c.name).join('、')}本月未见买卖。`;features.push(f);}
+    if(s.repo.length)features.push(feature('monthly-repo',`回购累计${amount(sum(s.repo,r=>r.yi))}，其中${groups(s.repo,r=>r.direction,r=>r.yi).map(g=>`${g.name}${amount(g.value)}`).join('、')}。`,[['回购统计','独立于常规交易金额']],s.repo,40));
+    if(!s.total&&!s.primaryYi&&!s.repo.length)features.unshift(feature('monthly-empty','本月导入记录中未见常规交易、分销或回购。',scopeMetrics,[],30));
     const lines=[`【${a.name}】${monthLabel(month)}账户分析`,...features.map(f=>f.text)];
-    if(extra.closed>=3&&extra.winRate!=null)lines.push(`现有现券FIFO口径：本月匹配${extra.closed}个片段，价格配对胜率${extra.winRate}%。`);
+    if(extra.closed>=3&&extra.winRate!=null)lines.push(`现有现券FIFO口径：本月价格配对胜率${extra.winRate}%。`);
     if(extra.fee!=null)lines.push(`本月投顾费到账${extra.fee.toFixed(2)}万元。`);
     if(extra.navChg!=null)lines.push(`当月首末可用净值变化${extra.navChg>=0?'+':''}${extra.navChg.toFixed(2)}%。`);
-    return{code,month,features,evidenceFeatures:qualityEvidence(a,idx,h,s),text:lines.join('\n\n'),summary:features.filter(f=>!['inception','scale','monthly-repo','monthly-holdings'].includes(f.key)).slice(0,2).map(f=>f.text).join(''),stats:s,flags:flags(a,idx,h,s)};
+    const summaryFeatures=[...changes.filter(f=>['category-change','pattern-change','inactive-change'].includes(f.key)).slice(0,1),...features.filter(f=>f.key.startsWith('monthly-')&&!['monthly-holdings','monthly-repo','monthly-total'].includes(f.key)).slice(0,2)];
+    const summary=(summaryFeatures.length?summaryFeatures:features.filter(f=>!['inception','scale','monthly-holdings'].includes(f.key)).slice(0,2)).map(f=>f.text).join('');
+    return{code,month,features,evidenceFeatures:qualityEvidence(a,idx,h,s),text:lines.join('\n\n'),summary,stats:s,flags:flags(a,idx,h,s)};
   }
   function evidence(idx,code,key,month){const r=month&&month!=='all'?monthly(idx,code,month):overview(idx,code);const f=r&&[...r.features,...r.evidenceFeatures||[]].find(x=>x.key===key);if(!f)return null;return{...f,records:f.recordIds.map(id=>idx.records.get(id)).filter(Boolean),flags:r.flags};}
   return{VERSION,RULES,build,overview,monthly,evidence,statistics,holdings,amount,dateLabel,monthLabel,prevMonth};
@@ -2682,20 +2734,20 @@ function renderAccountNarrative(code){
   const idx=noteIndex(),r=idx&&AccountNarrative.overview(idx,code);if(!r)return'';
   const month=profileState.month&&profileState.month!=='all'?profileState.month:'';
   const monthly=month&&idx.accounts.get(code)?.months.includes(month)?AccountNarrative.monthly(idx,code,month):null;
-  return`<section class="note-panel" id="accountNarrativePanel" data-code="${noteEsc(code)}"><div class="note-heading">账户特点 ${r.startLabel?`<span class="badge badge-blue">${noteEsc(r.startLabel)}</span>`:''}<span class="note-version">文字分析 ${AccountNarrative.VERSION}</span></div><div class="note-scope">观察区间：${noteEsc(idx.periodStart||'未标明')}—${noteEsc(idx.periodEnd||'未标明')} · 持仓：${noteEsc(idx.endDate||'本次期末材料')}</div><div class="note-prose">${r.features.map(f=>`<span>${noteEsc(f.text)}${noteFeatureButton(code,f,'all')}</span>`).join('')}</div>${r.flags.length?`<details class="note-quality"><summary>取数提示 ${r.flags.length}项</summary><ul>${r.flags.map(s=>`<li>${noteEsc(s)}</li>`).join('')}</ul>${noteFeatureButton(code,{key:'quality'},'all','查看对应记录')}</details>`:''}${monthly?`<div class="note-month"><strong>${noteEsc(AccountNarrative.monthLabel(month))}交易补充</strong><p>${noteEsc(monthly.summary)} ${monthly.features.filter(f=>f.key==='monthly-total').map(f=>noteFeatureButton(code,f,month,'查看当月依据')).join('')}</p></div>`:''}</section>`;
+  return`<section class="note-panel" id="accountNarrativePanel" data-code="${noteEsc(code)}"><div class="note-heading">账户特点 ${r.startLabel?`<span class="badge badge-blue">${noteEsc(r.startLabel)}</span>`:''}</div><div class="note-scope">观察区间：${noteEsc(idx.periodStart||'未标明')}—${noteEsc(idx.periodEnd||'未标明')} · 持仓：${noteEsc(idx.endDate||'本次期末材料')}</div><div class="note-prose">${r.features.map(f=>`<span>${noteEsc(f.text)}${noteFeatureButton(code,f,'all')}</span>`).join('')}</div>${monthly?`<div class="note-month"><strong>${noteEsc(AccountNarrative.monthLabel(month))}交易补充</strong><p>${noteEsc(monthly.summary)} ${monthly.features.filter(f=>f.key==='monthly-total').map(f=>noteFeatureButton(code,f,month,'查看当月依据')).join('')}</p></div>`:''}</section>`;
 }
 function refreshAccountNarrative(){const el=document.getElementById('accountNarrativePanel');if(el&&el.dataset.code)el.outerHTML=renderAccountNarrative(el.dataset.code);}
 function renderNarrativeMonthCard(code,month){
   const idx=noteIndex(),r=idx&&AccountNarrative.monthly(idx,code,month);if(!r)return'';
   const a=idx.accounts.get(code),isNew=a.meta.startDate?.slice(0,7)===month;
-  return`<div class="account-detail note-story-card" style="margin-top:12px"><div class="detail-header">${noteEsc(month)} ${isNew?'<span class="badge badge-green">启用当月</span>':''}<button type="button" class="note-evidence" onclick="selectNarrativeMonth('${noteToken(month)}')">查看详细月报</button></div><p class="note-prose">${noteEsc(r.summary||'本月未见交易记录。')}</p><details class="note-month-details"><summary>展开本月分析及依据</summary>${r.features.map(f=>`<p>${noteEsc(f.text)}${noteFeatureButton(code,f,month)}</p>`).join('')}${r.flags.length?`<p class="note-warning">${r.flags.map(noteEsc).join('；')}</p>`:''}</details></div>`;
+  return`<div class="account-detail note-story-card" style="margin-top:12px"><div class="detail-header">${noteEsc(month)} ${isNew?'<span class="badge badge-green">启用当月</span>':''}<button type="button" class="note-evidence" onclick="selectNarrativeMonth('${noteToken(month)}')">查看详细月报</button></div><p class="note-prose">${noteEsc(r.summary||'本月未见交易记录。')}</p><details class="note-month-details"><summary>展开本月分析及依据</summary>${r.features.map(f=>`<p>${noteEsc(f.text)}${noteFeatureButton(code,f,month)}</p>`).join('')}</details></div>`;
 }
 function selectNarrativeMonth(token){storyState.reportMonth=decodeURIComponent(token);renderStoryPanel();const box=document.getElementById('storyReportText');if(box)box.scrollIntoView({behavior:'smooth',block:'center'});}
 function renderStoryNarrativeEvidence(code,month){
   const box=document.getElementById('storyNarrativeEvidence');if(!box)return;
   const r=noteIndex()&&AccountNarrative.monthly(noteIndex(),code,month);if(!r){box.innerHTML='';return;}
-  const labels={'monthly-total':'当月交易','primary':'一级与二级来源','scale':'规模','monthly-holdings':'本期持仓','trade-change':'交易变化','category-change':'品种变化','monthly-repo':'回购','inception':'运作日期'};
-  box.innerHTML=`<div class="note-scope">查看支撑指标和原始记录：${r.features.filter(f=>f.recordIds.length||f.metrics.length).map(f=>noteFeatureButton(code,f,month,labels[f.key]||f.key.replace('monthly-',''))).join('')}</div>${r.flags.length?`<details class="note-quality"><summary>取数提示 ${r.flags.length}项</summary><ul>${r.flags.map(s=>`<li>${noteEsc(s)}</li>`).join('')}</ul>${noteFeatureButton(code,{key:'quality'},month,'查看对应记录')}</details>`:''}`;
+  const labels={'monthly-total':'当月交易','primary':'一级与二级来源','scale':'规模','monthly-holdings':'本期持仓','trade-change':'交易变化','category-change':'品种变化','pattern-change':'操作方式变化','direction-change':'买卖方向变化','inactive-change':'参与变化','monthly-repo':'回购','inception':'运作日期'};
+  box.innerHTML=`<div class="note-scope">查看支撑指标和原始记录：${r.features.filter(f=>f.recordIds.length||f.metrics.length).map(f=>noteFeatureButton(code,f,month,labels[f.key]||f.key.replace('monthly-',''))).join('')}</div>`;
 }
 function closeNarrativeEvidence(){const old=document.getElementById('narrativeEvidenceOverlay');if(old){if(old._close)old._close();else old.remove();}}
 function showNarrativeEvidence(codeToken,keyToken,monthToken){
@@ -2706,7 +2758,7 @@ function showNarrativeEvidence(codeToken,keyToken,monthToken){
   const header=document.createElement('div');header.className='note-dialog-head';const title=document.createElement('strong');title.textContent='分析依据';header.appendChild(title);const close=document.createElement('button');close.type='button';close.textContent='关闭';header.appendChild(close);dialog.appendChild(header);
   const body=document.createElement('div');body.className='note-dialog-body';dialog.appendChild(body);const claim=document.createElement('p');claim.className='note-prose';claim.textContent=data.text;body.appendChild(claim);
   const table=document.createElement('table'),tbody=document.createElement('tbody');table.appendChild(tbody);for(const [label,value]of data.metrics){const tr=document.createElement('tr');for(const v of [label,value]){const td=document.createElement('td');td.textContent=String(v??'');tr.appendChild(td);}tbody.appendChild(tr);}body.appendChild(table);
-  if(data.flags.length){const p=document.createElement('p');p.className='note-warning';p.textContent=data.flags.join('；');body.appendChild(p);}
+  if(data.flags.length){const p=document.createElement('p');p.className='note-warning';p.textContent=data.flags.join('；');body.appendChild(p);if(key!=='quality'){const btn=document.createElement('button');btn.type='button';btn.className='note-evidence';btn.textContent='查看取数记录';btn.onclick=()=>showNarrativeEvidence(codeToken,'quality',monthToken);body.appendChild(btn);}}
   const search=document.createElement('input');search.type='search';search.placeholder='按证券、日期、文件或交易编号查找';search.className='note-record-search';body.appendChild(search);
   const recordBox=document.createElement('div');recordBox.className='table-container';body.appendChild(recordBox);const pager=document.createElement('div');pager.className='pager';body.appendChild(pager);let page=0;
   const render=()=>{
@@ -2716,7 +2768,7 @@ function showNarrativeEvidence(codeToken,keyToken,monthToken){
     for(const r of rows.slice(page*40,(page+1)*40)){
       const tr=document.createElement('tr'),src=r.source,location=src?`${src.file||''} / ${src.sheet||''} / ${src.row?`第${src.row}行`:'原行号未保留'}`:'此导入记录未保留来源位置';
       const val=r.kind==='info'?r.value||'—':r.kind==='scale'?AccountNarrative.amount(r.sizeYi):r.kind==='future'?`${r.qty}手 / 保证金${r.marginWan.toFixed(2)}万元`:AccountNarrative.amount(r.yi||0);
-      const values=[r.date||'未标明',(r.kind==='quality'?`${r.rule||''} ${r.level||''} ${r.variety||''}`:r.variety)||({holding:r.snapshot==='start'?'期初持仓':'期末持仓',scale:'规模表',future:'期货持仓',quality:`${r.rule||''} ${r.level||''}`}[r.kind]||r.kind),r.code||'',r.name||'',r.direction||'',val,r.kind==='quality'?r.detail||'—':r.kind==='holding'?`${r.rating||'—'} / ${r.remain>0?r.remain.toFixed(2)+'年':'—'}`:'—',`${location}${r.tradeId?` / 交易编号 ${r.tradeId}`:''}`];
+      const values=[r.date||'未标明',(r.kind==='quality'?`${r.rule||''} ${r.level||''} ${r.variety||''}`:r.variety)||({holding:r.snapshot==='start'?'期初持仓':'期末持仓',scale:'规模表',future:'期货持仓',quality:`${r.rule||''} ${r.level||''}`}[r.kind]||r.kind),r.code||'',r.name||'',r.direction||'',val,r.kind==='quality'?r.detail||'—':r.kind==='holding'?`${r.category==='信用债'?(r.rating||'未提供'):'—'} / ${r.remain>0?r.remain.toFixed(2)+'年':'—'}`:'—',`${location}${r.tradeId?` / 交易编号 ${r.tradeId}`:''}`];
       for(const value of values){const td=document.createElement('td');td.textContent=String(value);tr.appendChild(td);}b.appendChild(tr);
     }
     if(!rows.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=8;td.textContent='没有对应记录；日期或基础资料的指标见上方取数说明。';tr.appendChild(td);b.appendChild(tr);}t.appendChild(b);recordBox.appendChild(t);
