@@ -204,6 +204,25 @@ test('monthly reports describe stronger activity and a smaller account together 
 test('small changes in scale avoid a meaningless rounded zero decline',()=>{
   const pos=[{_code:account,_dateStr:'2026-05-31',_size:1e9},{_code:account,_dateStr:'2026-06-30',_size:1e9-1}];const {idx}=result(store([flow('C1','2026-06-01','买入',1)],{}, {},{pos}));const m=A.monthly(idx,account,'2026-06');assert(m.text.includes('与上月基本持平'));assert(!m.text.includes('减少0.0%'));
 });
-test('routine repo remains accessible as evidence without filling the regular-trading narrative',()=>{
-  const repo=flow('RP1','2026-06-01','逆回购',10);const {idx}=result(store([flow('C1','2026-06-01','买入',1)],{}, {},{hg:[repo]}));const m=A.monthly(idx,account,'2026-06');assert(!m.text.includes('回购累计'));const e=A.evidence(idx,account,'monthly-repo','2026-06');assert(e.records.some(r=>r.category==='回购'));
+test('routine repo stays in monthly prose alongside regular trading and retains its evidence',()=>{
+  const repo=flow('RP1','2026-06-01','逆回购',10);const {idx}=result(store([flow('C1','2026-06-01','买入',1)],{}, {},{hg:[repo]}));const m=A.monthly(idx,account,'2026-06');assert(m.text.includes('回购累计10.00亿元'));assert(m.text.includes('逆回购10.00亿元'));assert.equal(m.stats.total,1);const e=A.evidence(idx,account,'monthly-repo','2026-06');assert(e.records.some(r=>r.category==='回购'));
+});
+test('repo comparisons show direction changes without mixing financing with security trading',()=>{
+  const repo=[flow('RP1','2026-05-05','正回购',2),flow('RP1','2026-06-05','正回购',1),flow('RP2','2026-06-06','逆回购',5)];const {idx}=result(store([flow('C1','2026-06-01','买入',1)],{}, {},{hg:repo}));const m=A.monthly(idx,account,'2026-06');assert(m.text.includes('回购累计6.00亿元'));assert(m.text.includes('较上月2.00亿元增加200.0%'));assert(m.text.includes('由上月以正回购为主转为本月以逆回购为主'));assert.equal(m.stats.total,1);assert(!/融资用于|借入资金|杠杆套利/.test(m.text));const e=A.evidence(idx,account,'monthly-repo','2026-06');assert(e.records.some(r=>r.date.startsWith('2026-05')));
+});
+test('monthly details state major-category buy and sell amounts behind the behavioral conclusion',()=>{
+  const flows=[flow('C1','2026-06-02','买入',2),flow('C1','2026-06-03','卖出',.1),flow('R1','2026-06-04','买入',1,'利率债'),flow('R1','2026-06-05','卖出',.5,'利率债')];const {idx}=result(store(flows,{bonds:[bond('C1',2)]}));const m=A.monthly(idx,account,'2026-06');const credit=m.features.find(f=>f.key==='monthly-信用债');assert(credit);assert(credit.text.includes('买入2.00亿元、卖出0.10亿元'));assert(credit.text.includes('净买入1.90亿元'));assert(credit.text.includes('配置'));assert(m.features.some(f=>f.key==='monthly-利率债'));assert.equal(m.stats.total,3.6);
+});
+test('monthly credit term detail uses flow terms and leaves unknowns in its denominator',()=>{
+  const rows=[flow('C1','2026-06-02','买入',.8),flow('C2','2026-06-03','买入',.2)];rows[0]['期限']='1-3年';const {idx}=result(store(rows));const m=A.monthly(idx,account,'2026-06');assert(m.text.includes('期限主要集中在0—3年（约80%）'));rows[0]['期限']='';const other=result(store(rows,{bonds:[bond('C1',1)]}));assert(!A.monthly(other.idx,account,'2026-06').text.includes('成交流水中的期限主要集中'));
+});
+test('monthly short-holding detail uses all sales as its denominator and keeps earlier source trades',()=>{
+  const flows=[];for(let i=0;i<3;i++){flows.push(flow('C'+i,'2026-05-29','买入',1));flows.push(flow('C'+i,'2026-06-02','卖出',1));}const {idx}=result(store(flows));const m=A.monthly(idx,account,'2026-06');const e=A.evidence(idx,account,'monthly-信用债','2026-06');assert(e.records.some(r=>r.date==='2026-05-29'));assert(m.text.includes('100%卖出对应买入后20天内'));assert(!m.text.includes('持有约4.0天'));assert(!m.text.includes('所有持仓平均'));
+});
+test('chart rendering uses the verified bundled release without a chart CDN script request',()=>{
+  const crypto=require('node:crypto');const bundled=html.match(/<script id="echarts-bundled">\n([\s\S]*?)\n<\/script>/)?.[1];assert(bundled);const bytes=Buffer.from(bundled);assert.equal(crypto.createHash('sha1').update(Buffer.concat([Buffer.from('blob '+bytes.length+'\0'),bytes])).digest('hex'),'3e09d312e2faea1f4c5ef2c804ce57f97389eba0');assert(!/<script[^>]+src=["'][^"']*echarts/.test(html));assert(html.includes('Copyright 2017-2023 The Apache Software Foundation'));
+});
+
+test('a short-period majority is not contradicted by an average pulled up by older inventory',()=>{
+  const flows=[flow('C1','2026-05-01','买入',.3),flow('C1','2026-05-31','买入',.7),flow('C1','2026-06-02','卖出',.3),flow('C1','2026-06-03','卖出',.3),flow('C1','2026-06-04','卖出',.4)];const {idx}=result(store(flows));const m=A.monthly(idx,account,'2026-06');assert(m.text.includes('70%卖出对应买入后20天内'));assert(!m.text.includes('金额加权持有约'));
 });
