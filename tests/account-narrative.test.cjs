@@ -40,7 +40,7 @@ test('primary allocation and later secondary sale match quantities, not equal ca
   const s=flow('B1','2026-02-01','卖出',1.2,'信用债','现券买卖',6000);
   const {idx,r}=result(store([p,s]));assert.equal(r.stats.total,1.2);assert.equal(r.stats.primaryYi,1);assert.equal(r.stats.matchedPrimary,1.2);
   assert(r.text.includes('一级分销买入'));assert(r.text.includes('二级市场卖出'));
-  const m=A.monthly(idx,account,'2026-02');assert(m.text.includes('此前分销买入'));assert.equal(m.stats.categories[0].primaryYi,1.2);
+  const m=A.monthly(idx,account,'2026-02');assert(m.text.includes('分销取得'));assert.equal(m.stats.categories[0].primaryYi,1.2);
 });
 test('partial quantities cannot attribute the whole sale to primary allocation',()=>{
   const p=flow('B1','2026-01-03','分销买入',.4,'信用债','分销买卖',4000);
@@ -67,7 +67,7 @@ test('sell then repurchase is distinct from a proved same-day buy-sell close',()
   const sold=flow('F1','2026-06-03','卖出',.1,'基金','基金买卖',1000,'2026-06-03 10:00:00');
   const bought=flow('F1','2026-06-03','买入',.1,'基金','基金买卖',1000,'2026-06-03 14:00:00');
   const {r}=result(store([sold,bought],{funds:[fund('F1',1,'示例债券ETF')]},{funds:[fund('F1',1,'示例债券ETF')]}));
-  const c=r.stats.categories[0];assert.equal(c.sameDayPairs,1);assert.equal(c.sellThenBuy,1);assert.equal(c.sameDayYi,0);assert(r.text.includes('同日卖出后买回'));
+  const c=r.stats.categories[0];assert.equal(c.sameDayPairs,1);assert.equal(c.sellThenBuy,1);assert.equal(c.sameDayYi,0);assert(!r.text.includes('同日卖出后买回'));
 });
 test('a later system-entry timestamp cannot prove same-day transaction order',()=>{
   const b=flow('F1','2026-06-03','买入',.1,'基金','基金买卖'),s=flow('F1','2026-06-03','卖出',.1,'基金','基金买卖');
@@ -139,7 +139,7 @@ test('monthly source evidence includes earlier primary purchases and opening hol
 });
 test('material secondary holdings and trading categories are mentioned',()=>{
   const {r}=result(store([flow('C1','2026-06-01','买入',.7),flow('V1','2026-06-02','买入',.3,'转债')],{bonds:[bond('C1',.7)],funds:[fund('F1',.3,'示例债券基金')]}));
-  assert(r.features.find(f=>f.key==='holdings').text.includes('另持有基金（约占30%）'));assert(r.features.find(f=>f.key==='main-trading').text.includes('转债本期仅见买入'));
+  assert(r.features.find(f=>f.key==='holdings').text.includes('另持有基金（约占30%）'));assert(r.features.find(f=>f.key==='main-trading').text.includes('转债（约占30%交易额）'));
 });
 test('rounding does not imply an exclusive holding when minor assets are present',()=>{
   const {r}=result(store([],{bonds:[bond('C1',9.99)],funds:[fund('F1',.01,'示例债券基金')]}));const text=r.features.find(f=>f.key==='holdings').text;assert(!text.includes('占100%'));assert(text.includes('少量持有基金'));
@@ -150,7 +150,7 @@ test('all holding categories remain visible even under a dominant fund allocatio
 });
 test('credit allocation and rate-bond swing trading have separate explanations',()=>{
   const flows=[flow('C1','2026-06-01','买入',2)];for(let i=0;i<3;i++){flows.push(flow('R1',`2026-06-${String(i*2+2).padStart(2,'0')}`,'买入',.2,'利率债'));flows.push(flow('R1',`2026-06-${String(i*2+3).padStart(2,'0')}`,'卖出',.2,'利率债'));}
-  const {r}=result(store(flows,{bonds:[bond('C1',3)],funds:[fund('F1',.1,'示例基金'),fund('P1',.05,'示例REIT','REITs')]}));assert(r.text.includes('信用债以买入配置为主'));assert(r.text.includes('利率债以波段买卖为主'));assert(r.text.includes('基金、REITs以持有为主'));
+  const {r}=result(store(flows,{bonds:[bond('C1',3)],funds:[fund('F1',.1,'示例基金'),fund('P1',.05,'示例REIT','REITs')]}));assert(/信用债（约占\d+%交易额）.*买入配置/.test(r.text));assert(/利率债（约占\d+%交易额）.*波段/.test(r.text));assert(r.text.includes('基金和REITs以持有为主'));
 });
 test('swing frequency uses active dates over the observation period',()=>{
   const high=[];for(let i=0;i<12;i++){high.push(flow('R1',`2026-06-${String(i*2+1).padStart(2,'0')}`,'买入',1,'利率债'));high.push(flow('R1',`2026-06-${String(i*2+2).padStart(2,'0')}`,'卖出',1,'利率债'));}
@@ -160,7 +160,7 @@ test('swing frequency uses active dates over the observation period',()=>{
 });
 test('monthly same-day trading explains the pattern without counting security-date combinations',()=>{
   const flows=[];for(let i=1;i<=8;i++){const d='2026-06-'+String(i).padStart(2,'0');flows.push(flow('F1',d,'买入',1,'基金','基金买卖',10000,d+' 10:00:00'));flows.push(flow('F1',d,'卖出',1,'基金','基金买卖',10000,d+' 14:00:00'));}
-  const {idx}=result(store(flows));const m=A.monthly(idx,account,'2026-06');assert(m.text.includes('同日双向交易'));assert(!m.text.includes('个同券'));assert(!m.text.includes('组合'));assert(!m.text.includes('F1'));
+  const {idx}=result(store(flows));const m=A.monthly(idx,account,'2026-06');assert(m.text.includes('波段'));assert(!m.text.includes('同日'));assert(!m.text.includes('个同券'));assert(!m.text.includes('组合'));assert(!m.text.includes('F1'));
 });
 test('a shift between mixed main categories is reported below the old sixty-percent cutoff',()=>{
   const flows=[flow('C1','2026-05-03','买入',.55),flow('R1','2026-05-04','买入',.45,'利率债'),flow('C1','2026-06-03','买入',.42),flow('R1','2026-06-04','买入',.58,'利率债')];
@@ -171,14 +171,39 @@ test('a changing secondary share is visible even when the top category stays the
 });
 test('monthly reports connect earlier one-way fund buying with later swing activity',()=>{
   const flows=[flow('F0','2026-05-03','买入',1,'基金','基金买卖')];for(let i=0;i<4;i++){flows.push(flow('F1',`2026-06-0${i*2+1}`,'买入',1,'基金','基金买卖'));flows.push(flow('F1',`2026-06-0${i*2+2}`,'卖出',1,'基金','基金买卖'));}
-  const {idx}=result(store(flows));const m=A.monthly(idx,account,'2026-06');assert(m.features.some(f=>f.key==='pattern-change'));assert(m.text.includes('由上月的单向买入转为本月的波段买卖'));
+  const {idx}=result(store(flows));const m=A.monthly(idx,account,'2026-06');assert(m.features.some(f=>f.key==='monthly-behavior'));assert(m.text.includes('相较5月仅见买入'));assert(m.text.includes('波段交易'));
 });
 test('monthly direction changes and suspended participation are connected to the prior month',()=>{
   const {idx}=result(store([flow('C1','2026-05-03','买入',1),flow('R1','2026-05-04','买入',1,'利率债'),flow('C1','2026-06-04','卖出',1)]));const m=A.monthly(idx,account,'2026-06');assert(m.text.includes('由上月净买入'));assert(m.text.includes('利率债本月未见买卖'));
 });
 test('primary-funded secondary sales are not described as reducing the whole credit position',()=>{
-  const {r}=result(store([flow('C1','2026-05-01','分销买入',10,'信用债','分销买卖'),flow('C2','2026-05-03','买入',1),flow('C1','2026-06-04','卖出',9)]));assert(r.text.includes('信用债以卖出一级分销取得的仓位为主'));assert(!r.text.includes('信用债以卖出减持为主'));
+  const {r}=result(store([flow('C1','2026-05-01','分销买入',10,'信用债','分销买卖'),flow('C2','2026-05-03','买入',1),flow('C1','2026-06-04','卖出',9)]));assert(r.text.includes('一级分销'));assert(r.text.includes('二级市场卖出'));assert(!r.text.includes('信用债以卖出减持为主'));
 });
 test('primary activity prevents a false statement that a category has stopped trading',()=>{
   const {idx}=result(store([flow('C1','2026-05-01','买入',1),flow('C1','2026-06-01','分销买入',1,'信用债','分销买卖')]));const m=A.monthly(idx,account,'2026-06');assert(!m.features.some(f=>f.key==='inactive-change'));assert(m.text.includes('一级分销买入'));
+});
+test('each main category states its own share of the same total trading amount',()=>{
+  for(const [credit,rate]of [[.7,.3],[.4,.6]]){const {r}=result(store([flow('C1','2026-06-01','买入',credit),flow('R1','2026-06-02','买入',rate,'利率债')]));assert(r.text.includes(`信用债（约占${credit*100}%交易额）`));assert(r.text.includes(`利率债（约占${rate*100}%交易额）`));}
+});
+test('two main swing categories can share a sentence while retaining both amount shares',()=>{
+  const flows=[];for(const [name,code,yi]of [['信用债','C1',.1],['利率债','R1',.1]])for(let i=0;i<3;i++){flows.push(flow(code,`2026-06-0${i*2+1}`,'买入',yi,name));flows.push(flow(code,`2026-06-0${i*2+2}`,'卖出',yi,name));}const {r}=result(store(flows));assert(r.text.includes('信用债和利率债均有短周期波段买卖'));assert(r.text.includes('分别约占50%、50%'));
+});
+test('auxiliary trading is grouped and isolated tiny activity does not become a separate characteristic',()=>{
+  const flows=[flow('C1','2026-06-01','买入',10),flow('F1','2026-06-02','卖出',.0001,'基金','基金买卖')];for(let i=0;i<12;i++)flows.push(flow('V1',`2026-06-${String(i+2).padStart(2,'0')}`,i%2?'卖出':'买入',.0001,'转债'));for(let i=0;i<3;i++)flows.push(flow('P1',`2026-06-${String(i+2).padStart(2,'0')}`,'买入',.0001,'REITs','基金买卖'));
+  const {r}=result(store(flows));const t=r.features.find(f=>f.key==='main-trading').text;assert(t.includes('转债、REITs作为辅助交易'));assert(t.includes('小额多笔'));assert(!t.includes('基金'));assert(!/兼有买入和卖出调整|伴有同日/.test(t));assert.equal(r.stats.trades.length,flows.length);
+});
+test('a new account changes from building its position to swing activity without comparing a partial launch month as a full month',()=>{
+  const flows=[flow('F0','2026-05-25','买入',1,'基金','基金买卖')];for(let i=0;i<4;i++){flows.push(flow('F1',`2026-06-0${i*2+1}`,'买入',1,'基金','基金买卖'));flows.push(flow('F1',`2026-06-0${i*2+2}`,'卖出',1,'基金','基金买卖'));}const {idx,r}=result(store(flows,{funds:[fund('F1',1,'示例债券ETF')]}),{strat:{[account]:{startDate:'2026-05-20'}}});const m=A.monthly(idx,account,'2026-06');assert(m.text.includes('相较5月仅买入建仓'));assert(m.text.includes('短周期波段交易'));assert(!m.text.includes('上月的8.0倍'));assert(r.text.includes('6月转为'));assert(!m.text.includes('同日'));
+});
+test('monthly prose groups a reversal across the major bond categories and keeps the source records',()=>{
+  const flows=[flow('C1','2026-05-01','买入',1.1),flow('C1','2026-05-02','卖出',1),flow('R1','2026-05-03','买入',1,'利率债'),flow('R1','2026-05-04','卖出',.5,'利率债'),flow('C1','2026-06-03','卖出',2),flow('R1','2026-06-04','卖出',1,'利率债')];const {idx}=result(store(flows));const m=A.monthly(idx,account,'2026-06');assert(m.text.includes('信用债和利率债均由上月净买入转为净卖出'));const e=A.evidence(idx,account,'monthly-behavior','2026-06');assert(e.records.some(r=>r.date.startsWith('2026-05')));
+});
+test('monthly reports describe stronger activity and a smaller account together without inventing a cash-withdrawal explanation',()=>{
+  const flows=[flow('C1','2026-05-03','买入',1),flow('C1','2026-06-03','卖出',4)];const pos=[{_code:account,_dateStr:'2026-05-31',_size:1e9},{_code:account,_dateStr:'2026-06-30',_size:1e8}];const {idx}=result(store(flows,{}, {},{pos}));const m=A.monthly(idx,account,'2026-06');assert(m.text.includes('约为上月的4.0倍'));assert(m.text.includes('债券净卖出和账户规模明显收缩'));assert(!/赎回|撤资/.test(m.text));
+});
+test('small changes in scale avoid a meaningless rounded zero decline',()=>{
+  const pos=[{_code:account,_dateStr:'2026-05-31',_size:1e9},{_code:account,_dateStr:'2026-06-30',_size:1e9-1}];const {idx}=result(store([flow('C1','2026-06-01','买入',1)],{}, {},{pos}));const m=A.monthly(idx,account,'2026-06');assert(m.text.includes('与上月基本持平'));assert(!m.text.includes('减少0.0%'));
+});
+test('routine repo remains accessible as evidence without filling the regular-trading narrative',()=>{
+  const repo=flow('RP1','2026-06-01','逆回购',10);const {idx}=result(store([flow('C1','2026-06-01','买入',1)],{}, {},{hg:[repo]}));const m=A.monthly(idx,account,'2026-06');assert(!m.text.includes('回购累计'));const e=A.evidence(idx,account,'monthly-repo','2026-06');assert(e.records.some(r=>r.category==='回购'));
 });
