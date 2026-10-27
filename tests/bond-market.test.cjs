@@ -82,8 +82,8 @@ test('missing sell prices retain sold amounts but do not contribute invented ret
 test('buy-only securities are not assigned zero follow-up returns',()=>{
  const d=data([['2026-06-01',100],['2026-06-08',102]]),g=first([flow('2026-06-01','买入')],d);assert.equal(g.week.total,0);assert.equal(g.week.full.return,null);
 });
-test('non-spot varieties and primary allocations do not change the spot table',()=>{
- const rows=[flow('2026-06-01','买入')];for(const variety of ['基金买卖','分销买卖','国债期货','质押式回购'])rows.push({...flow('2026-06-01','买入',10),_variety:variety});rows.push(flow('2026-06-01','分销买入',10));
+test('primary allocations, futures, repos and share adjustments do not enter the replay',()=>{
+ const rows=[flow('2026-06-01','买入')];for(const variety of ['分销买卖','国债期货','质押式回购'])rows.push({...flow('2026-06-01','买入',10),_variety:variety});rows.push(flow('2026-06-01','分销买入',10));rows.push({...flow('2026-06-01','份额调整',10),_variety:'基金买卖'});
  const s=M.summarize(M.index(rows,M.merge()));assert.equal(s.tradeCount,1);assert.equal(s.amount,.01);
 });
 test('account and month filtering change trades without clipping later valuations',()=>{
@@ -101,11 +101,58 @@ test('display grouping preserves all raw same-day same-price transactions',()=>{
 test('fifth-slot parsing accepts quote-only and mixed-information workbooks',()=>{
  const c=vm.createContext({Date,console,setTimeout,clearTimeout,document:{querySelectorAll:()=>[],getElementById:()=>({addEventListener(){}})},window:{addEventListener(){}},XLSX:{utils:{decode_range:()=>({s:{r:0}}),sheet_to_json:ws=>ws.rows}}});
  new vm.Script(html.match(/<script>([\s\S]*?)<\/script>\s*<\/body>/)[1]).runInContext(c);
- c.workbook={SheetNames:['策略','行情'],Sheets:{策略:{rows:[['项目编号','SAC账户名称','静态收益率'],['DEMO_ACCOUNT','虚构账户',2]]},行情:{rows:sheet([['2026-06-01',100]])}}};
- const part=vm.runInContext('parseAcctInfoWb(workbook,"fictional-info.xlsx")',c);assert.equal(part.strategy.length,1);assert.equal(part.marketParts.length,1);assert.equal(part.found.filter(x=>x.type==='market').length,1);
+ c.workbook={SheetNames:['策略','债券','基金'],Sheets:{策略:{rows:[['项目编号','SAC账户名称','静态收益率'],['DEMO_ACCOUNT','虚构账户',2]]},债券:{rows:sheet([['2026-06-01',100]])},基金:{rows:sheet([['2026-06-01',1.2]],['000123.OF'],['虚构基金'])}}};
+ const part=vm.runInContext('parseAcctInfoWb(workbook,"fictional-info.xlsx")',c);assert.equal(part.strategy.length,1);assert.equal(part.marketParts.length,2);assert.equal(part.found.filter(x=>x.type==='market').length,2);assert(part.found.some(x=>x.label.includes('基金单位净值')));
  assert(html.includes('&&!acctInfo.marketParts.length)acctInfo=null;'));
 });
 test('module adds no networking or persistent business storage',()=>{
  const ui=html.match(/\/\/ BOND_MARKET_UI_BEGIN([\s\S]*?)\/\/ BOND_MARKET_UI_END/)[1];
- assert(!/\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|localStorage|sessionStorage|indexedDB|setWidgetState/.test(moduleSource+ui));assert(html.includes('每页15条'));assert(html.includes('trading-analyzer-release" content="2026.10.27.1'));
+ assert(!/\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|localStorage|sessionStorage|indexedDB|setWidgetState/.test(moduleSource+ui));assert(html.includes('每页15条'));assert(html.includes('trading-analyzer-release" content="2026.10.27.2'));
+});
+
+const fundData=(rows,codes=['000123.OF'],names=['虚构基金'])=>M.merge([M.parseSheet(sheet(rows,codes,names),'fictional-quotes.xlsx','基金')]);
+const fundFlow=(date,direction,amount=.01,price=1,shares=100,code='000123',mkt='场外市场')=>({...flow(date,direction,amount,price,shares,code,mkt),_variety:'基金买卖',_name2:'虚构基金','净价(元)':999});
+test('fund unit NAV sheets support OF, SH and SZ markets without losing leading zeros',()=>{
+ const d=fundData([['2026-06-01',1.2,.8,2]],['000123.OF','DEMO_ETF.SH','DEMO_REIT.SZ']);
+ assert.equal(d.stats.fundCount,3);assert.equal(d.stats.bondCount,0);assert(d.series.has('000123|OF|fund'));
+ assert.equal(M.identity(123,'场外市场','fund').code,'000123');assert.equal(M.identity('000123.OF').market,'OF');
+ for(const s of d.series.values())assert.equal(s.kind,'fund');
+});
+test('fund trades match NAV using ledger full price and ignore deliberately incorrect net price',()=>{
+ const d=fundData([['2026-06-01',1.1],['2026-06-08',1.2],['2026-07-01',1.3]]),g=first([fundFlow('2026-06-01','卖出',.01,1)],d);
+ assert.equal(g.price,1);assert.equal(g.kind,'fund');assert(Math.abs(g.week.full.return-.2)<1e-12);assert(Math.abs(g.month.full.return-.3)<1e-12);assert.equal(M.marks(g)[0].price,1);
+});
+test('fund identifier suffixes are preserved rather than stripped into a different share class',()=>{
+ const d=fundData([['2026-06-01',1.2]],['001234!1.OF']);assert(d.series.has('001234!1|OF|fund'));
+ assert.equal(M.resolve(d,M.identity('001234','场外市场','fund'),'fund').series,null);assert.equal(M.resolve(d,M.identity('001234!1.OF'),'fund').series.quotes[0][1],1.2);
+});
+test('missing fund full price never falls back to net price, unit NAV or an amount-derived price',()=>{
+ const d=fundData([['2026-06-01',1],['2026-06-08',1.2]]),g=first([fundFlow('2026-06-01','卖出',.01,null)],d);
+ assert.equal(g.price,null);assert.equal(g.sell,.01);assert.equal(g.week.full.return,null);assert.equal(M.marks(g).length,0);assert(g.week.reasons.includes('缺卖出全价'));
+});
+test('fund sell price is share weighted and follow-up is weighted by sold amount',()=>{
+ const d=fundData([['2026-06-01',1],['2026-06-02',2],['2026-06-08',1.2],['2026-06-09',2.2]]);
+ const g=first([fundFlow('2026-06-01','卖出',.01,1,100),fundFlow('2026-06-02','卖出',.06,2,300)],d);
+ assert.equal(g.price,1.75);assert(Math.abs(g.week.full.return-(.01*.2+.06*.1)/.07)<1e-12);
+});
+test('same code and market in bond and fund sheets cannot cross-match or merge trades',()=>{
+ const bonds=M.parseSheet(sheet([['2026-06-01',101]],['DEMO_SAME.SH']),'fictional.xlsx','债券');
+ const funds=M.parseSheet(sheet([['2026-06-01',1.1]],['DEMO_SAME.SH']),'fictional.xlsx','基金');
+ const d=M.merge([bonds,funds]),s=M.summarize(M.index([flow('2026-06-01','买入',.01,100,100,'DEMO_SAME','上交所'),fundFlow('2026-06-01','买入',.02,1,100,'DEMO_SAME','上交所')],d));
+ assert.equal(s.groups.length,2);assert.equal(s.groups.find(g=>g.kind==='fund').series.quotes[0][1],1.1);assert.equal(s.groups.find(g=>g.kind==='bond').series.quotes[0][1],101);
+ const fundOnly=M.merge([funds]);assert.equal(M.resolve(fundOnly,M.identity('DEMO_SAME','上交所'),'bond').series,null);
+});
+test('asset filtering uses separate caches while preserving account and month scope',()=>{
+ const idx=M.index([flow('2026-06-01','买入'),fundFlow('2026-06-01','买入',.02)],M.merge());
+ assert.equal(M.summarize(idx).groups.length,2);assert.equal(M.summarize(idx,'','all','fund').groups.length,1);assert.equal(M.summarize(idx,'','all','bond').amount,.01);assert.equal(M.summarize(idx,'','2026-05','fund').groups.length,0);
+});
+test('a later fund sheet cutoff does not make a bond observation complete',()=>{
+ const b=M.parseSheet(sheet([['2026-06-01',100],['2026-06-07',101]]),'fictional.xlsx','债券');
+ const f=M.parseSheet(sheet([['2026-06-01',1],['2026-06-08',1.01]],['000123.OF']),'fictional.xlsx','基金');
+ const d=M.merge([b,f]),idx=M.index([flow('2026-06-01','卖出'),fundFlow('2026-06-01','卖出')],d),s=M.summarize(idx);
+ assert.equal(s.groups.find(g=>g.kind==='bond').sales[0].week.status,'partial');assert.equal(s.groups.find(g=>g.kind==='bond').sales[0].week.cutoff,'2026-06-07');assert.equal(s.groups.find(g=>g.kind==='fund').sales[0].week.status,'complete');
+});
+test('flat unit NAV is retained as a price change and labelled without implying total return',()=>{
+ const d=fundData([['2026-06-01',1],['2026-06-08',1]]),g=first([fundFlow('2026-06-01','卖出')],d);
+ assert.equal(g.week.full.return,0);assert(html.includes('零净值变化不代表零投资收益'));assert(html.includes('单位净值变动未加入分红和收益分配'));
 });
