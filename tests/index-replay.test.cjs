@@ -76,7 +76,7 @@ test('zero actual with nonzero projection is flagged and negative balances are n
  const r=fixture({opening:[],ending:[bond('DEMO_A','DEMO_CREDIT',0)],flows:[flow('2026-01-06','卖出',.00001)]});r._store.hdStart.bonds=[];const s=I.scope(I.build(r),all);assert.equal(s.checks.length,1);assert.equal(s.checks[0].ratio,Infinity);assert(s.totals.credit.projected<0);
 });
 test('opposite account errors remain visible even when department totals reconcile',()=>{
- const idx=build({opening:[bond('DEMO_A','DEMO_CREDIT',2000),bond('DEMO_B','DEMO_CREDIT',0)],ending:[bond(),bond('DEMO_B','DEMO_CREDIT',1000)]}),s=I.scope(idx,all);assert.equal(s.checks.length,2);assert(Math.abs(s.totals.credit.projected-s.actual.credit)<1e-12);
+ const idx=build({opening:[bond('DEMO_A','DEMO_CREDIT',2000),bond('DEMO_B','DEMO_CREDIT',0)],ending:[bond(),bond('DEMO_B','DEMO_CREDIT',1000)],pos:[position(first,1),position(first,1,'DEMO_B')]}),s=I.scope(idx,all);assert.equal(s.checks.length,2);assert(Math.abs(s.totals.credit.projected-s.actual.credit)<1e-12);
 });
 test('scale gap fill never looks ahead and scope caches cannot leak between hierarchy objects',()=>{
  const idx=build({pos:[position('2026-01-07',2)]}),s=I.scope(idx,all);assert.equal(s.daily.get(first).values.credit.ratio,null);assert.equal(s.daily.get('2026-01-06').values.credit.ratio,null);assert.equal(s.daily.get('2026-01-08').values.credit.ratio,.05);assert.equal(s.daily.get('2026-01-08').carriedSize,1);
@@ -84,4 +84,43 @@ test('scale gap fill never looks ahead and scope caches cannot leak between hier
 });
 test('new modules have no networking or persistent business storage and index prices never join security data',()=>{
  const source=extract('INDEX_REPLAY')+extract('INDEX_REPLAY_UI');assert(!/\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|localStorage|sessionStorage|indexedDB/.test(source));assert(html.indexOf('IndexReplay.parseSheet(aoa')<html.indexOf('BondMarket.parseSheet(aoa'));assert(html.includes("connect-src 'none'"));
+});
+test('account universe is cleaned flow and size union; holdings reference and IAM alone cannot add accounts',()=>{
+ const r=fixture({opening:[bond('HELD_ONLY')],ending:[bond('HELD_ONLY')],flows:[flow('2026-01-06','买入',.01,'FLOW_ONLY')],pos:[position(first,1,'SCALE_ONLY')],dim:{IAM_ONLY:{line:'虚构部门'}}});
+ r._store.hg=[{_code:'REPO_ONLY',_name:'虚构回购账户'}];r._store.zqAll.push(flow('2026-01-06','买入',.01,'FUTURE_ONLY','DEMO_F','国债期货'));
+ r.acctDim.strat={STRATEGY_ONLY:{sacName:'虚构策略账户'}};
+ const idx=I.build(r);assert.deepEqual([...idx.accounts.keys()].sort(),['FLOW_ONLY','FUTURE_ONLY','REPO_ONLY','SCALE_ONLY']);assert.equal(I.scope(idx,all).opening.credit,0);
+});
+test('scale-only accounts inherit latest valid full-table department while IAM takes priority',()=>{
+ const r=fixture({opening:[],ending:[],pos:[{...position(first,1,'SCALE_ONLY'),_belong:'虚构旧部门'},{...position(last,1,'SCALE_ONLY'),_belong:'财富产品部'},{...position('2026-01-12',1,'SCALE_ONLY'),_belong:''},{...position(first,1),_belong:'财富产品部'}],dim:{DEMO_A:{line:'投资顾问部'}}});
+ const idx=I.build(r);assert.equal(idx.accounts.get('SCALE_ONLY').dept,'财富产品部');assert.equal(idx.accounts.get('DEMO_A').dept,'投资顾问部');
+});
+test('uploaded trading calendar controls plotted dates including holiday gaps; internal end reconciliation still exists',()=>{
+ const r=fixture({pos:[position(first,1),position('2026-01-10',1)]});r._store.hdEnd.dateStr='01.10';const idx=I.build(r),s=I.scope(idx,all);
+ assert(!I.isTradingDay(idx,'2026-01-10'));assert(I.isTradingDay(idx,last));assert(!I.isTradingDay(idx,'2026-01-01'));assert(s.daily.get('2026-01-10').values.credit.amount>0);
+ const ui=extract('INDEX_REPLAY_UI')+extract('BOND_MARKET_UI');assert(!ui.includes('connectNulls:false'));assert(ui.includes('IndexReplay.isTradingDay'));
+});
+test('individual holding cash path includes primary buys and put-back but excludes opening-day double count',()=>{
+ const r=fixture({flows:[flow(first,'买入',99),flow('2026-01-06','分销买入',.2,'DEMO_A','DEMO_CREDIT','分销买卖'),flow('2026-01-07','卖出',.1),flow(last,'债券回售',.05,'DEMO_A','DEMO_CREDIT','债券回售')],ending:[bond('DEMO_A','DEMO_CREDIT',1500)]});
+ const p=I.securityPosition(I.build(r),'DEMO_A',{code:'DEMO_CREDIT',market:'IB',kind:'bond'});assert(Math.abs(p.daily.get('2026-01-06').amount-.3)<1e-12);assert(Math.abs(p.projected-.15)<1e-12);assert(Math.abs(p.daily.get(last).ratio-.15)<1e-12);assert.equal(p.buy,.2);assert.equal(p.repay,.05);assert(!p.flagged);assert.equal(p.daily.get('2026-01-12').amount,null);
+});
+test('individual position uses all earlier months even when displayed trade table selects a later month',()=>{
+ const r=fixture({flows:[flow('2026-01-06','买入',.2),flow('2026-02-02','卖出',.1)]});r._store.hdEnd.dateStr='02.03';r.indexMarket=quotes([first,'2026-01-06','2026-02-02','2026-02-03']);
+ const idx=I.build(r),before=I.securityPosition(idx,'DEMO_A',{code:'DEMO_CREDIT',market:'IB',kind:'bond'});const table=M.summarize(M.index(r._store.zqAll,M.merge()),'DEMO_A','2026-02');assert.equal(table.tradeCount,1);assert(Math.abs(before.projected-.2)<1e-12);assert(Math.abs(before.daily.get('2026-02-02').amount-.2)<1e-12);
+});
+test('held-only securities within an in-scope account can be selected without changing trade summary',()=>{
+ const idx=build(),options=I.securityOptions(idx,'DEMO_A',[]);assert.equal(options.length,1);assert.equal(options[0].count,0);assert.equal(options[0].kind,'bond');const p=I.securityPosition(idx,'DEMO_A',options[0]);assert.equal(p.opening,.1);assert.equal(p.projected,.1);
+});
+test('individual holding identity separates bond fund and exchange markets with the same code',()=>{
+ const r=fixture({opening:[{...bond(),code:'SHARED',market:'银行间'},{...bond(),code:'SHARED',market:'上交所',mv:2000}],startFunds:[{...fund('SHARED','虚构基金'),mv:3000}],endFunds:[{...fund('SHARED','虚构基金'),mv:3000}]});
+ const idx=I.build(r),get=(kind,market)=>I.securityPosition(idx,'DEMO_A',{code:'SHARED',kind,market}).opening;
+ assert.equal(get('bond','IB'),.1);assert.equal(get('bond','SH'),.2);assert.equal(get('fund','SH'),.3);assert.equal(get('bond','SZ'),0);
+});
+test('fund leading zeros and generic market reconcile with full quote identity; fund net price is ignored',()=>{
+ const r=fixture({opening:[],ending:[],startFunds:[{...fund('000123','虚构基金'),market:'场外市场',mv:1000}],endFunds:[{...fund('000123','虚构基金'),market:'场外市场',mv:3000}],flows:[{...flow('2026-01-06','买入',.2,'DEMO_A','123','基金买卖'),_mkt:'场外市场','全价(元)':1.01,'净价(元)':999}]});
+ r.bondMarket=M.merge([M.parseSheet([['日期','虚构基金'],['Date','000123.OF'],[first,1],[last,1.01]],'fictional.xlsx','基金')]);
+ const idx=I.build(r),options=I.securityOptions(idx,'DEMO_A',[],'fund');assert.equal(options.length,1);assert(options[0].series);const p=I.securityPosition(idx,'DEMO_A',options[0]);assert(Math.abs(p.projected-.3)<1e-12);assert(!p.flagged);
+});
+test('individual zero actual nonzero estimate flags discrepancy and missing scale leaves position intact',()=>{
+ const r=fixture({pos:[position('2026-01-08',1)],ending:[bond('DEMO_A','DEMO_CREDIT',0)]}),idx=I.build(r),p=I.securityPosition(idx,'DEMO_A',{code:'DEMO_CREDIT',market:'IB',kind:'bond'});assert.equal(p.daily.get(first).amount,.1);assert.equal(p.daily.get(first).ratio,null);assert(p.flagged);assert.equal(p.discrepancy,Infinity);
 });
