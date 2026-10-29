@@ -395,17 +395,20 @@ th .th-sort:hover{color:#1d4ed8}
 .ir-controls label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:#475569;min-width:0}
 .ir-controls input,.ir-controls select,.ir-record-controls select{width:100%;min-width:0;padding:9px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1e293b;font:inherit}
 .ir-categories{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0}
-.ir-categories button{display:flex;flex-direction:column;gap:6px;text-align:left;padding:13px;border:1px solid #e2e8f0;background:#fff;border-radius:8px;color:#475569;cursor:pointer;min-width:0}
-.ir-categories button[aria-selected=true]{border-color:#2563eb;background:#eff6ff;color:#1d4ed8}.ir-categories strong{font-size:14px}.ir-categories span{font-size:12px;overflow-wrap:anywhere}
+.ir-categories button{display:flex;flex-direction:column;gap:12px;text-align:left;padding:15px 16px;border:1px solid #e2e8f0;background:#fff;border-radius:10px;color:#475569;cursor:pointer;min-width:0}
+.ir-categories button[aria-selected=true]{border-color:#2563eb;background:#eff6ff;color:#1d4ed8}.ir-categories button:focus-visible{outline:2px solid #2563eb;outline-offset:2px}.ir-categories strong{font-size:14px}.ir-categories span{font-size:12px;overflow-wrap:anywhere}
+.ir-card-head,.ir-card-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0}.ir-card-head strong{flex-shrink:0}.ir-position-ratio{font-size:11px!important;text-align:right;color:#64748b}.ir-categories button[aria-selected=true] .ir-position-ratio{color:#1d4ed8}
+.ir-card-holdings{display:grid;grid-template-columns:minmax(0,1fr) 16px minmax(0,1fr);align-items:center;gap:8px}.ir-card-holdings>span{display:flex;flex-direction:column;gap:4px}.ir-card-holdings small,.ir-card-foot small{font-size:11px;color:#64748b}.ir-card-holdings b{font-size:18px;font-weight:600;line-height:1.25;font-variant-numeric:tabular-nums}.ir-card-holdings .ir-card-arrow{display:block;font-size:16px;color:#94a3b8;text-align:center}.ir-card-foot{padding-top:9px;border-top:1px solid #e2e8f0;font-variant-numeric:tabular-nums}.ir-card-foot>span:last-child{text-align:right}.ir-quality{margin:6px 0 14px;line-height:1.8}.ir-excluded{color:#b45309}
 .ir-chart-title{font-size:14px;font-weight:600;color:#334155;line-height:1.6}.ir-chart{width:100%;height:650px}
 .ir-views{display:flex;gap:10px;margin:16px 0}.ir-views button,.ir-record-controls button{padding:8px 14px;border:1px solid #cbd5e1;background:#fff;border-radius:6px;color:#475569;cursor:pointer}.ir-views button[aria-pressed=true]{background:#2563eb;border-color:#2563eb;color:#fff}
 .ir-record-controls{display:flex;gap:12px;align-items:center;margin:12px 0;flex-wrap:wrap}.ir-record-controls select{width:220px}.ir-link{background:none;border:0;padding:0;font:inherit;color:#2563eb;text-align:left;cursor:pointer}
 #indexReplay table small{display:block;font-size:11px;color:#64748b;white-space:normal;margin-top:4px}#indexReplay td{vertical-align:top}#indexReplay .text-right{white-space:nowrap}
 #indexSingleAccountReplay .mr-controls>label:first-child{display:none}.ir-legacy{margin:18px 0}.ir-legacy>summary{cursor:pointer;color:#64748b;font-size:13px;padding:12px 0}
-@media(max-width:768px){.ir-controls{grid-template-columns:1fr}.ir-categories{grid-template-columns:repeat(2,minmax(0,1fr))}.ir-categories button{padding:10px}.ir-chart{height:600px}.ir-categories span{font-size:11px}}
+@media(max-width:1000px){.ir-categories{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:768px){.ir-controls{grid-template-columns:1fr}.ir-categories button{padding:12px;gap:10px}.ir-card-head{align-items:flex-start;flex-direction:column;gap:3px}.ir-card-holdings{grid-template-columns:1fr;gap:8px}.ir-card-holdings .ir-card-arrow{display:none}.ir-card-holdings>span{flex-direction:row;align-items:baseline;justify-content:space-between;gap:5px}.ir-card-holdings b{font-size:15px}.ir-card-foot{flex-wrap:wrap;gap:5px}.ir-card-foot>span:last-child{text-align:left}.ir-chart{height:600px}.ir-categories span{font-size:11px}}
 
 </style>
-<meta name="trading-analyzer-release" content="2026.10.29.1">
+<meta name="trading-analyzer-release" content="2026.10.29.2">
 </head>
 <body>
 <div class="container">
@@ -645,7 +648,7 @@ function parseHoldingsWb(wb,label){
     if(name.includes('期货')){
       for(const r of rows){const acct=toStr(r['证券账户代码']);if(!acct)continue;out.futures.push({acct,contract:toStr(r['合约代码']),dir:toStr(r['多空头标志']),qty:toNum(r['交易数量(手)']),costNonDaily:toNum(r['持仓成本_非逐日(万元)']),margin:toNum(r['保证金占用(万元)']),floatPnl:toNum(r['浮动盈亏_非逐日(万元)']),realPnl:toNum(r['已实现盈亏_非逐日(万元)']),_source:r._source})}
     }else if(name.includes('非标')||name.includes('基金')){
-      for(const r of rows){const acct=toStr(r['证券账户代码']),code=toStr(r['基金代码']);if(!acct&&!code)continue;out.funds.push({acct,code,name:toStr(r['基金名称']),market:toStr(r['市场类型']),kind:toStr(r['基金种类']),assetType:toStr(r['资产类型']),face:toNum(r['持仓面额(万元)']),mv:toNum(r['市值(万元)']),floatPnl:toNum(r['浮动盈亏(万元)']),realPnl:toNum(r['已实现盈亏(万元)']),_source:r._source})}
+      for(const r of rows){const acct=toStr(r['证券账户代码']),code=toStr(r['基金代码']);if(!acct&&!code)continue;out.funds.push({acct,code,name:toStr(r['基金名称']),market:toStr(r['市场类型']),kind:toStr(r['基金种类']),assetType:toStr(r['资产类型']),quantity:toNum(r['持仓数量']),face:toNum(r['持仓面额(万元)']),mv:toNum(r['市值(万元)']),floatPnl:toNum(r['浮动盈亏(万元)']),realPnl:toNum(r['已实现盈亏(万元)']),_source:r._source})}
     }else{
       for(const r of rows){const acct=toStr(r['证券账户代码']),code=toStr(r['债券代码']);if(!acct&&!code)continue;out.bonds.push({acct,code,name:toStr(r['债券名称']),bondType:toStr(r['债券类型']),assetType:toStr(r['资产类型']),market:toStr(r['市场类型']),rateClass:toStr(r['利率分类']),face:toNum(r['持仓面额(万元)']),mv:toNum(r['市值(万元)']),costFull:toNum(r['每百元全价成本(元)']),remain:toNum(r['剩余期限(年)']),remainKnown:r['剩余期限(年)']!=null&&r['剩余期限(年)']!=='',rating:toStr(r['中债隐含评级']),dorm:toNum(r['休眠天数']),floatPnl:toNum(r['浮动盈亏(万元)']),realPnl:toNum(r['已实现盈亏(万元)']),_source:r._source})}
     }
@@ -2798,7 +2801,7 @@ function initChart(el){
 // BOND_MARKET_BEGIN
 // Generic local-only parsing and calculations. No embedded prices or account data.
 const BondMarket = (() => {
-  const VERSION='2026.10.29.1', DAY=86400000;
+  const VERSION='2026.10.29.2', DAY=86400000;
   const text=v=>v==null?'':String(v).trim();
   function number(v){
     if(typeof v==='number')return Number.isFinite(v)?v:null;
@@ -2997,11 +3000,11 @@ const BondMarket = (() => {
 // INDEX_REPLAY_BEGIN
 // Generic in-memory index replay. Contains no business records or embedded quotes.
 const IndexReplay=(()=>{
-  const VERSION='2026.10.29.1',EPS=1e-10;
+  const VERSION='2026.10.29.2',EPS=1e-10;
   const CATEGORIES=[
     {key:'rateShort',label:'利率债0—7年',code:'CBA33401.CS',name:'中债-0-7年国债及政策性金融债财富(总值)指数'},
     {key:'rateLong',label:'利率债7年以上',code:'CBA34301.CS',name:'中债-7-30年国债及政策性金融债财富(总值)指数'},
-    {key:'convertible',label:'转债及转债ETF',code:'000832.CSI',name:'中证转债'},
+    {key:'convertible',label:'转债及转债基金',code:'000832.CSI',name:'中证转债'},
     {key:'equityFund',label:'股票ETF',code:'000300.SH',name:'沪深300'},
     {key:'otherFund',label:'其他基金',code:'CBA00101.CS',name:'中债-新综合财富(总值)指数'},
     {key:'credit',label:'信用债及ABS',code:'CBA20901.CS',name:'中债-优选投资级信用债财富(总值)指数'}
@@ -3039,29 +3042,57 @@ const IndexReplay=(()=>{
     const exact=new Map(),byCode=new Map();
     for(const [which,hd]of [['end',store.hdEnd],['start',store.hdStart]])for(const kind of ['bonds','funds'])for(const h of hd?.[kind]||[]){
       const id=assetId(h.code,h.market,kind==='funds'?'fund':'bond');if(!id.code)continue;
-      let m=exact.get(id.key);if(!m){m={...id,name:'',type:'',assetType:'',fundKind:'',endRemain:0};exact.set(id.key,m);if(!byCode.has(id.kind+'|'+id.code))byCode.set(id.kind+'|'+id.code,[]);byCode.get(id.kind+'|'+id.code).push(m);}
-      if(!m.name)m.name=str(h.name);if(!m.type)m.type=str(h.bondType);if(!m.assetType)m.assetType=str(h.assetType);if(!m.fundKind)m.fundKind=str(h.kind);
+      let m=exact.get(id.key);if(!m){m={...id,name:'',type:'',rateClass:'',assetType:'',fundKind:'',endFundKind:'',hasEnd:false,endRemain:0};exact.set(id.key,m);if(!byCode.has(id.kind+'|'+id.code))byCode.set(id.kind+'|'+id.code,[]);byCode.get(id.kind+'|'+id.code).push(m);}
+      if(!m.name)m.name=str(h.name);if(!m.type)m.type=str(h.bondType);if(!m.rateClass)m.rateClass=str(h.rateClass);if(!m.assetType)m.assetType=str(h.assetType);if(!m.fundKind)m.fundKind=str(h.kind);
+      if(which==='end'){m.hasEnd=true;if(!m.endFundKind)m.endFundKind=str(h.kind);}
       if(which==='end'&&num(h.remain)>0)m.endRemain=num(h.remain);
     }
     const lookup=id=>{if(exact.has(id.key))return exact.get(id.key);const all=byCode.get(id.kind+'|'+id.code)||[];return all.length===1?all[0]:null;};
-    return{lookup};
+    // A fund's category follows closing metadata across custody markets. This
+    // does not merge quote identities, security suffixes or transaction records.
+    const fundKind=id=>{const all=(byCode.get('fund|'+id.code)||[]).filter(m=>m.hasEnd),same=all.find(m=>m.key===id.key);if(same?.endFundKind)return same.endFundKind;const kinds=[...new Set(all.map(m=>m.endFundKind).filter(Boolean))];return kinds.length===1?kinds[0]:'';};
+    const fundNames=id=>(byCode.get('fund|'+id.code)||[]).map(m=>m.name).join(' ');
+    return{lookup,fundKind,fundNames};
   }
   function classify(item,kind,meta){
     const id=assetId(item.code??item['代码'],item.market??item._mkt??item['托管市场']??item['交易市场'],kind),m=meta.lookup(id);
-    const name=[str(item.name??item._name2??item['名称']),m?.name||''].join(' '),type=str(m?.type||item.bondType||item._bondType),cat=str(item._class||item._cat),fundKind=str(m?.fundKind||item.kind);
+    const name=[str(item.name??item._name2??item['名称']),m?.name||'',kind==='fund'?meta.fundNames?.(id)||'':''].join(' '),type=str(m?.type||item.bondType||item._bondType),cat=str(item._class||item._cat),rateClass=str(m?.rateClass||item.rateClass||item['利率分类']);
     if(kind==='fund'){
-      const etf=(/ETF/i.test(name+' '+fundKind)&&!/ETF联接/i.test(name));
-      if(etf&&/转债|可交换债/.test(name))return'convertible';
-      if(etf&&(/股票ETF/.test(fundKind)||/沪深300|中证(?:500|1000|2000|A500)|上证50|科创|创业板|红利|恒生|港股|纳指|纳斯达克|标普|半导体|芯片|证券ETF|银行ETF|军工|医药|医疗|消费|人工智能|新能源|光伏/.test(name))&&!/债|货币|现金|同业存单|黄金|商品/.test(name+' '+fundKind))return'equityFund';
+      if(/可转债/.test(name)||(/ETF/i.test(name)&&/转债/.test(name)))return'convertible';
+      if(meta.fundKind?.(id)==='股票ETF')return'equityFund';
       return'otherFund';
     }
-    if(CONV.has(type)||/转债/.test(cat)||/可转债|可交换债/.test(name))return'convertible';
+    if(CONV.has(type))return'convertible';
+    if(/利率/.test(rateClass))return(m?.endRemain||0)>7?'rateLong':'rateShort';
+    if(/信用/.test(rateClass))return'credit';
+    if(!m?.type&&(/转债/.test(cat)||/可转债|可交换债/.test(name)))return'convertible';
     if(RATE.has(type)||cat==='利率债'||/国债|国开|农发|进出|政策性金融债/.test(name))return(m?.endRemain||0)>7?'rateLong':'rateShort';
     if(type||['信用债','ABS'].includes(cat)||/资产支持|受益凭证|ABS/i.test(name))return'credit';
     return'';
   }
+  function scaleAt(a,date){
+    const ps=a?.positions||[];let lo=0,hi=ps.length;while(lo<hi){const m=(lo+hi)>>1;if(ps[m].date<=date)lo=m+1;else hi=m;}return ps[lo-1]||null;
+  }
+  function fundTradeCheck(a,r){
+    const kind=r.kind||(str(r._variety||r['交易品种'])==='基金买卖'?'fund':'bond'),direction=str(r.action||r._dir||r['交易方向']);
+    if(kind!=='fund'||!['buy','sell','买入','卖出'].includes(direction))return null;
+    const date=day(r.date||r._dateStr||r._date||r['交易日期']),amount=BondMarket.number(r.amount??r._amountYi)??num(r['交易金额(元)'])/1e8,p=scaleAt(a,date);
+    if(!a||!date||!(amount>0))return null;
+    if(!p)return{excluded:false,reasonCode:'missingTradeSize',reason:'缺少当日及此前有效净规模，未核验30%门槛',netSize:null,scaleDate:'',tradeRatio:null};
+    const ratio=amount/p.size;if(ratio<=.3+1e-12)return null;
+    return{excluded:true,reasonCode:'fundTradeOver30',reason:'单笔基金买卖超过账户净规模30%',netSize:p.size,scaleDate:p.date,scaleSource:p.source,tradeRatio:ratio};
+  }
+  function fundHoldingChecks(rows=[]){
+    const groups=new Map(),checks=new WeakMap();
+    for(const h of rows){const id=assetId(h.code,h.market,'fund'),key=str(h.acct)+'|'+id.code,negative=num(h.mv)<-EPS||num(h.face)<-EPS||num(h.quantity??h.qty)<-EPS,positive=!negative&&(num(h.mv)>EPS||num(h.face)>EPS||num(h.quantity??h.qty)>EPS);if(!id.code)continue;if(!groups.has(key))groups.set(key,[]);groups.get(key).push({h,id,negative,positive});}
+    for(const [key,rs]of groups){const paired=rs.some(r=>r.negative&&rs.some(p=>p.positive&&p.id.market!==r.id.market&&!['?','EX'].includes(p.id.market)&&!['?','EX'].includes(r.id.market)));
+      for(const r of rs){const counterpart=r.negative&&rs.some(p=>p.positive&&p.id.market!==r.id.market&&!['?','EX'].includes(p.id.market)&&!['?','EX'].includes(r.id.market));checks.set(r.h,{excluded:r.negative&&!counterpart,crossMarket:paired,group:key,reasonCode:r.negative&&!counterpart?'negativeFundHolding':'',reason:r.negative&&!counterpart?'基金负持仓无跨市场正值对应，未计入该截面持仓':paired?'同账户同基金跨市场正负对应，保留计算':''});}
+    }
+    return checks;
+  }
+  function filterTrades(idx,rows=[]){return rows.filter(r=>!fundTradeCheck(idx.accounts.get(str(r._code||r['内部证券账户代码'])),r)?.excluded);}
   function build(result){
-    const store=result._store||{},meta=metadata(store),accounts=new Map(),dim=result.acctDim?.dim||{},strat=result.acctDim?.strat||{};
+    const store=result._store||{},meta=metadata(store),accounts=new Map(),crossMarketFunds=new Set(),dim=result.acctDim?.dim||{},strat=result.acctDim?.strat||{};
     const scaleCodes=new Set((store.pos||[]).map(r=>str(r._code||r['账户编号'])).filter(Boolean));
     const account=code=>accounts.get(str(code))||null;
     // Account universe is cleaned flow INTERSECT size records. Repo/futures
@@ -3069,7 +3100,7 @@ const IndexReplay=(()=>{
     // IAM is the sole department authority. Missing IAM stays explicitly unmatched.
     for(const r of [...store.hg||[],...store.zqAll||store.zq||[]]){
       const code=str(r._code||r['内部证券账户代码']);if(!code||!scaleCodes.has(code)||accounts.has(code))continue;
-      const d=dim[code]||{},managers=[...new Set(d.managers||[])];accounts.set(code,{code,name:d.sacName||strat[code]?.sacName||str(r._name||r['内部证券账户名称'])||code,dept:str(d.line)||'未匹配',managers,weight:1/Math.max(1,managers.length),startDate:strat[code]?.startDate||d.startDate||'',opening:Object.fromEntries(keys.map(k=>[k,0])),actual:Object.fromEntries(keys.map(k=>[k,0])),holdings:{start:[],end:[]},events:[],positions:[],unknown:[]});
+      const d=dim[code]||{},managers=[...new Set(d.managers||[])];accounts.set(code,{code,name:d.sacName||strat[code]?.sacName||str(r._name||r['内部证券账户名称'])||code,dept:str(d.line)||'未匹配',managers,weight:1/Math.max(1,managers.length),startDate:strat[code]?.startDate||d.startDate||'',opening:Object.fromEntries(keys.map(k=>[k,0])),actual:Object.fromEntries(keys.map(k=>[k,0])),holdings:{start:[],end:[]},events:[],positions:[],unknown:[],excluded:[],unverified:[]});
     }
     const allDates=[];
     for(const r of store.zqAll||store.zq||[]){
@@ -3083,15 +3114,23 @@ const IndexReplay=(()=>{
     for(const r of store.pos||[]){const a=account(r._code||r['账户编号']),date=day(r._dateStr||r._date||r['报告生成日期']);if(!a||!date)continue;allDates.push(date);const size=BondMarket.number(r._size)??num(r['账户规模(元)']);if(size>0)a.positions.push({date,size:size/1e8,source:r._source||null});if(a.name===a.code)a.name=str(r._nameSAC||r['账户名称SAC'])||a.code;}
     allDates.sort();const year=(allDates.at(-1)||String(new Date().getUTCFullYear())).slice(0,4),end=snapshot(store.hdEnd?.dateStr,year)||allDates.at(-1)||'',rawStart=snapshot(store.hdStart?.dateStr,year)||allDates[0]||'';
     const start=rawStart>end?(Number(year)-1)+rawStart.slice(4):rawStart;
-    for(const[which,hd]of [['start',store.hdStart],['end',store.hdEnd]])for(const kind of ['bonds','funds'])for(const h of hd?.[kind]||[]){
-      const a=account(h.acct);if(!a)continue;const assetKind=kind==='funds'?'fund':'bond',id=securityIdentity(h,assetKind,result.bondMarket,meta),bucket=classify(h,assetKind,meta),amount=num(h.mv)/1e4,record={account:a.code,date:which==='start'?start:end,bucket,amount,kind:assetKind,securityKey:id.key,market:id.market,name:str(h.name),code:id.code,recordKind:'holding',snapshot:which,source:h._source||null};
-      a.holdings[which].push(record);if(bucket)a[which==='start'?'opening':'actual'][bucket]+=amount;else if(Math.abs(amount)>EPS)a.unknown.push(record);
+    for(const[which,hd]of [['start',store.hdStart],['end',store.hdEnd]]){
+      const fundChecks=fundHoldingChecks(hd?.funds);
+      for(const kind of ['bonds','funds'])for(const h of hd?.[kind]||[]){
+        const a=account(h.acct);if(!a)continue;const assetKind=kind==='funds'?'fund':'bond',id=securityIdentity(h,assetKind,result.bondMarket,meta),bucket=classify(h,assetKind,meta),amount=num(h.mv)/1e4,record={account:a.code,date:which==='start'?start:end,bucket,amount,kind:assetKind,securityKey:id.key,market:id.market,name:str(h.name),code:id.code,recordKind:'holding',snapshot:which,source:h._source||null,...(assetKind==='fund'?fundChecks.get(h)||{}:{})};
+        a.holdings[which].push(record);if(record.crossMarket)crossMarketFunds.add(a.code+'|'+id.code);
+        if(record.excluded)a.excluded.push(record);else if(bucket)a[which==='start'?'opening':'actual'][bucket]+=amount;else if(Math.abs(amount)>EPS)a.unknown.push(record);
+      }
     }
-    for(const a of accounts.values()){a.events=a.events.filter(e=>e.date>start&&e.date<=end).sort((a,b)=>a.date.localeCompare(b.date));const pos=new Map();for(const p of a.positions)pos.set(p.date,p);a.positions=[...pos.values()].sort((a,b)=>a.date.localeCompare(b.date));}
+    for(const a of accounts.values()){
+      const pos=new Map();for(const p of a.positions)pos.set(p.date,p);a.positions=[...pos.values()].sort((a,b)=>a.date.localeCompare(b.date));
+      const accept=e=>{if(e.date<=start||e.date>end)return false;const check=fundTradeCheck(a,e);if(check?.excluded){a.excluded.push({...e,recordKind:'flow',...check});return false;}if(check)a.unverified.push({...e,recordKind:'flow',...check});return true;};
+      a.events=a.events.filter(accept).sort((a,b)=>a.date.localeCompare(b.date));a.unknown=a.unknown.filter(u=>u.recordKind!=='flow'||accept(u));
+    }
     const departments=[...new Set([...accounts.values()].map(a=>a.dept))].sort((a,b)=>a.localeCompare(b,'zh-CN')),managers=new Map();
     for(const a of accounts.values())for(const name of a.managers){const key=a.dept+'|'+name;if(!managers.has(key))managers.set(key,{key,name,dept:a.dept});}
     const market=result.indexMarket||merge(),securityMarket=result.bondMarket||BondMarket.merge(),tradingDays=new Set(market.calendar.length?market.calendar:securityMarket.calendar);
-    return{version:VERSION,accounts,departments,managers:[...managers.values()].sort((a,b)=>a.name.localeCompare(b.name,'zh-CN')),start,end,market,securityMarket,tradingDays,hasStartSnapshot:!!(store.hdStart?.dateStr||store.hdStart?.bonds?.length||store.hdStart?.funds?.length),hasEndSnapshot:!!(store.hdEnd?.dateStr||store.hdEnd?.bonds?.length||store.hdEnd?.funds?.length),cache:new Map()};
+    return{version:VERSION,accounts,crossMarketFunds,departments,managers:[...managers.values()].sort((a,b)=>a.name.localeCompare(b.name,'zh-CN')),start,end,market,securityMarket,tradingDays,hasStartSnapshot:!!(store.hdStart?.dateStr||store.hdStart?.bonds?.length||store.hdStart?.funds?.length),hasEndSnapshot:!!(store.hdEnd?.dateStr||store.hdEnd?.bonds?.length||store.hdEnd?.funds?.length),cache:new Map()};
   }
   const isTradingDay=(idx,date)=>idx.tradingDays.size?idx.tradingDays.has(date):![0,6].includes(new Date(date+'T00:00:00Z').getUTCDay());
   function plotDates(quotes,events,start=''){
@@ -3110,10 +3149,11 @@ const IndexReplay=(()=>{
   }
   function scope(idx,state){
     const ck=[state.level,state.dept,state.manager,state.account].join('|');if(idx.cache.has(ck))return idx.cache.get(ck);
-    const selected=selections(idx,state),opening=Object.fromEntries(keys.map(k=>[k,0])),actual=Object.fromEntries(keys.map(k=>[k,0])),events=[],unknown=[],checks=[];
+    const selected=selections(idx,state),opening=Object.fromEntries(keys.map(k=>[k,0])),actual=Object.fromEntries(keys.map(k=>[k,0])),events=[],unknown=[],checks=[],excluded=[],unverified=[];
     for(const {account:a,weight:w}of selected){const end={...a.opening};for(const k of keys){opening[k]+=a.opening[k]*w;actual[k]+=a.actual[k]*w;}
       for(const e of a.events){events.push({...e,amount:e.amount*w,weight:w});end[e.bucket]+=(e.action==='buy'?1:-1)*e.amount;}
       for(const u of a.unknown)if(u.recordKind!=='flow'||u.date>idx.start&&u.date<=idx.end)unknown.push({...u,amount:u.amount*w});
+      for(const [target,rows]of [[excluded,a.excluded],[unverified,a.unverified]])for(const r of rows)target.push({...r,amount:r.amount*w,weight:w});
       if(idx.hasEndSnapshot)for(const k of keys){const diff=end[k]-a.actual[k],ratio=Math.abs(a.actual[k])>EPS?Math.abs(diff)/Math.abs(a.actual[k]):Math.abs(diff)>EPS?Infinity:0;
         if(ratio>.1+1e-10)checks.push({account:a.code,name:a.name,bucket:k,projected:end[k]*w,actual:a.actual[k]*w,diff:diff*w,ratio,weight:w,opening:a.opening[k]*w,buy:a.events.filter(e=>e.bucket===k&&e.action==='buy').reduce((s,e)=>s+e.amount*w,0),sell:a.events.filter(e=>e.bucket===k&&e.action==='sell').reduce((s,e)=>s+e.amount*w,0),repay:a.events.filter(e=>e.bucket===k&&e.action==='repay').reduce((s,e)=>s+e.amount*w,0)});}
     }
@@ -3127,14 +3167,14 @@ const IndexReplay=(()=>{
         if(e.date===d){changes[e.bucket][e.action]+=e.amount;changes[e.bucket].records.push(e);}}
       let netSize=0,missingSize=0,carriedSize=0,eligible=0,oldestScaleDate='';
       if(d<=idx.end)for(const {account:a,weight:w}of selected){
-        const started=a.holdings.start.some(h=>Math.abs(h.amount)>EPS)||a.events[0]?.date<=d||a.positions[0]?.date<=d;if(!started)continue;eligible++;
+        const started=a.holdings.start.some(h=>!h.excluded&&Math.abs(h.amount)>EPS)||a.events[0]?.date<=d||a.positions[0]?.date<=d;if(!started)continue;eligible++;
         let p=pointers.get(a.code)??-1;while(p+1<a.positions.length&&a.positions[p+1].date<=d)p++;pointers.set(a.code,p);
         if(p>=0){netSize+=a.positions[p].size*w;if(a.positions[p].date!==d){carriedSize++;if(!oldestScaleDate||a.positions[p].date<oldestScaleDate)oldestScaleDate=a.positions[p].date;}}else missingSize++;
       }
       const values={};for(const k of keys){const c=changes[k];values[k]={amount:d<=idx.end?balance[k]:null,ratio:d<=idx.end&&netSize>0&&!missingSize?balance[k]/netSize:null,buy:c.buy,sell:c.sell,repay:c.repay,net:c.buy-c.sell,records:c.records};if(d===idx.end)totals[k].ratio=values[k].ratio;}
       daily.set(d,{date:d,values,netSize:d<=idx.end?netSize:null,missingSize,carriedSize,oldestScaleDate,eligible});
     }
-    const out={selected,opening,actual,events,unknown,checks,calendar,daily,totals};if(idx.cache.size>=12)idx.cache.delete(idx.cache.keys().next().value);idx.cache.set(ck,out);return out;
+    const out={selected,opening,actual,events,unknown,checks,excluded,unverified,calendar,daily,totals};if(idx.cache.size>=12)idx.cache.delete(idx.cache.keys().next().value);idx.cache.set(ck,out);return out;
   }
   function securityOptions(idx,account,groups,kind='all'){
     const a=idx.accounts.get(account);if(!a)return groups;
@@ -3148,16 +3188,16 @@ const IndexReplay=(()=>{
   }
   function securityPosition(idx,account,security){
     const a=idx.accounts.get(account);if(!a)return null;
-    const id=securityIdentity(security,security.kind,idx.securityMarket),matches=r=>r.securityKey===id.key;
-    const opening=a.holdings.start.filter(matches).reduce((s,h)=>s+h.amount,0),actual=a.holdings.end.filter(matches).reduce((s,h)=>s+h.amount,0),events=[...a.events,...a.unknown.filter(e=>e.recordKind==='flow'&&e.date>idx.start&&e.date<=idx.end)].filter(matches).sort((a,b)=>a.date.localeCompare(b.date));
+    const id=securityIdentity(security,security.kind,idx.securityMarket),crossMarket=security.kind==='fund'&&idx.crossMarketFunds.has(account+'|'+id.code),matches=r=>crossMarket?r.kind==='fund'&&r.code===id.code:r.securityKey===id.key;
+    const opening=a.holdings.start.filter(h=>matches(h)&&!h.excluded).reduce((s,h)=>s+h.amount,0),actual=a.holdings.end.filter(h=>matches(h)&&!h.excluded).reduce((s,h)=>s+h.amount,0),events=[...a.events,...a.unknown.filter(e=>e.recordKind==='flow'&&e.date>idx.start&&e.date<=idx.end)].filter(matches).sort((a,b)=>a.date.localeCompare(b.date));
     const base=scope(idx,{level:'account',dept:'all',account}),daily=new Map();let balance=opening,p=0,buy=0,sell=0,repay=0;
     for(const date of base.calendar){while(p<events.length&&events[p].date<=date){const e=events[p++];balance+=(e.action==='buy'?1:-1)*e.amount;if(e.action==='buy')buy+=e.amount;else if(e.action==='sell')sell+=e.amount;else repay+=e.amount;}
       const d=base.daily.get(date),amount=date<=idx.end?balance:null,ratio=amount!=null&&d.netSize>0&&!d.missingSize?amount/d.netSize:null;daily.set(date,{...d,amount,ratio});
     }
     const diff=balance-actual,ratio=Math.abs(actual)>EPS?Math.abs(diff)/Math.abs(actual):Math.abs(diff)>EPS?Infinity:0;
-    return{calendar:base.calendar,daily,opening,actual,buy,sell,repay,projected:balance,diff,discrepancy:ratio,flagged:idx.hasEndSnapshot&&ratio>.1+1e-10,events};
+    return{calendar:base.calendar,daily,opening,actual,buy,sell,repay,projected:balance,diff,discrepancy:ratio,flagged:idx.hasEndSnapshot&&ratio>.1+1e-10,events,crossMarket,excluded:a.excluded.filter(matches),unverified:a.unverified.filter(matches)};
   }
-  return{VERSION,CATEGORIES,parseSheet,merge,metadata,classify,build,selections,scope,snapshot,securityIdentity,securityOptions,securityPosition,isTradingDay,plotDates,quoteGuide};
+  return{VERSION,CATEGORIES,parseSheet,merge,metadata,classify,build,selections,scope,snapshot,securityIdentity,securityOptions,securityPosition,isTradingDay,plotDates,quoteGuide,scaleAt,fundTradeCheck,fundHoldingChecks,filterTrades};
 })();
 // INDEX_REPLAY_END
 
@@ -5003,10 +5043,10 @@ function renderIndexReplaySection(){return `<div class="card" id="indexReplay" d
   <div class="ir-controls"><label>观察层级<select id="irLevel"><option value="department">部门</option><option value="manager">投资经理</option><option value="account">单个账户</option></select></label><label>部门<select id="irDepartment"></select></label><label id="irManagerControl" hidden>投资经理<select id="irManager"></select></label><label id="irAccountControl" hidden>账户<input id="irAccount" list="irAccounts" autocomplete="off" placeholder="输入名称或项目编号"><datalist id="irAccounts"></datalist></label></div>
   <div id="irMessage" class="mr-message" role="status" aria-live="polite"></div><div id="irContext" class="mr-context"></div>
   <div id="irViews" class="ir-views" hidden><button type="button" data-ir-view="index">指数复盘</button><button type="button" data-ir-view="security">个券复盘</button></div>
-  <div id="irIndexBody"><div id="irCategories" class="ir-categories" role="tablist" aria-label="六类指数"></div><div id="irChartTitle" class="ir-chart-title"></div><div id="irChart" class="ir-chart"></div><div id="irNote" class="mr-context"></div>
+  <div id="irIndexBody"><div id="irCategories" class="ir-categories" role="tablist" aria-label="六类指数"></div><div id="irQuality" class="mr-context ir-quality" role="status"></div><div id="irChartTitle" class="ir-chart-title"></div><div id="irChart" class="ir-chart"></div><div id="irNote" class="mr-context"></div>
   <details id="irChecks" class="mr-details"><summary></summary><div id="irCheckTable"></div></details>
-  <details id="irRecords" class="mr-details"><summary>查看对应持仓与流水</summary><div class="ir-record-controls"><select id="irRecordKind" aria-label="记录类型"><option value="flows">本类全部流水</option><option value="start">期初持仓</option><option value="end">期末持仓</option><option value="size">账户净规模</option><option value="unknown">未归类记录</option></select><button type="button" data-ir-action="clear-date">查看全部日期</button></div><div id="irRecordTable"></div></details>
-  <details class="mr-method"><summary>取数与计算口径</summary><p>账户范围为清洗后的交易流水与账户规模表项目编号的交集，持仓及基础资料只关联这些账户；部门以IAM归属为准，缺IAM时明确列未匹配，不用其他来源改写。初始金额取期初持仓明细的市值；基准日为该截面日终，只累计之后至期末截面日的交易金额。推算持仓=期初金额+买入+一级分销买入−卖出−债券回售，未随个券行情重新估值；回售只扣减持仓，不标为主动卖出。回购、期货、转托管及份额调整不计入净买卖，其他变动通过期末核对查看。指数买卖标记按当日同类买入−卖出，净额为零不标记，标记位置为该日指数收盘值；缺当日指数收盘价但有交易时，保留日期、持仓和净买卖标记；空心标记仅用前后连线位置示意（无双侧价格时参照最近有值位置），悬停注明缺价，不将示意位置作为真实价格参与计算。仓位=推算金额÷当日账户净规模，可以超过100%；缺日规模使用当日前最近有效报送值，并在悬停中显示沿用情况，首报前不向前补。经理按本次IAM归属的名下账户汇总，共管交易、持仓、净规模均按1/N分摊；部门内每户只算一次，分组比例均先加总分子分母。期限采用期末剩余期限固定分组，7年及以下、期限缺失的已识别利率债归短端，超过7年（含30年以上）参照长端指数。转债ETF优先于股票ETF识别，直接转债和转债ETF参照中证转债，股票ETF参照沪深300，其他基金含REITs及商品ETF参照新综合财富，信用债及ABS参照投资级信用债财富指数；未识别品种单列。指数展示到行情最新日，持仓与仓位止于分析期末；上下图使用有效行情日期与该类实际交易日期的合集；无行情且无交易的日期不补值，缺价交易日保留持仓，价格线跨空值连接，原始空值不填价格。卡片期初、期末实际持仓分别取对应截面明细市值，与交易金额累计的推算持仓分开列示。期末逐账户、逐品类核对，绝对偏差÷实际持仓绝对值超过10%即提示，不设金额门槛；实际为零且推算非零也提示，不调整曲线凑平。共管分摊前后偏差比例相同。指数属于参考市场走势，非该账户收益曲线。</p></details></div></div></div>`;}
+  <details id="irRecords" class="mr-details"><summary>查看对应持仓与流水</summary><div class="ir-record-controls"><select id="irRecordKind" aria-label="记录类型"><option value="flows">本类有效流水</option><option value="start">期初持仓（含筛选说明）</option><option value="end">期末持仓（含筛选说明）</option><option value="exceptions">本类异常筛选记录</option><option value="size">账户净规模</option><option value="unknown">未归类记录</option></select><button type="button" data-ir-action="clear-date">查看全部日期</button></div><div id="irRecordTable"></div></details>
+  <details class="mr-method"><summary>取数与计算口径</summary><p>账户范围为清洗后的交易流水与账户规模表项目编号的交集，持仓及基础资料只关联这些账户；部门以IAM归属为准，缺IAM时明确列未匹配，不用其他来源改写。初始金额取期初持仓明细的市值；基准日为该截面日终，只累计之后至期末截面日的交易金额。推算持仓=期初金额+买入+一级分销买入−卖出−债券回售，未随个券行情重新估值；回售只扣减持仓，不标为主动卖出。回购、期货、转托管及份额调整不计入净买卖，其他变动通过期末核对查看。指数买卖标记按当日同类买入−卖出，净额为零不标记，标记位置为该日指数收盘值；缺当日指数收盘价但有交易时，保留日期、持仓和净买卖标记；空心标记仅用前后连线位置示意（无双侧价格时参照最近有值位置），悬停注明缺价，不将示意位置作为真实价格参与计算。仓位=推算金额÷当日账户净规模，可以超过100%；缺日规模使用当日前最近有效报送值，并在悬停中显示沿用情况，首报前不向前补。经理按本次IAM归属的名下账户汇总，共管交易、持仓、净规模均按1/N分摊；部门内每户只算一次，分组比例均先加总分子分母。期限采用期末剩余期限固定分组，7年及以下、期限缺失的已识别利率债归短端，超过7年（含30年以上）参照长端指数。债券先按持仓明细“债券类型”识别可转债、可交换债，均参照中证转债；其余债券优先按“利率分类”区分利率债、信用债，利率债再按期限分组。基金名称含可转债（含普通转债基金）或明确为转债ETF时归中证转债，其余基金严格按期末基金子表“基金种类=股票ETF”归沪深300，不按名称主题猜测；剩余基金含REITs及商品ETF归新综合财富。未识别债券品种单列。基金持仓逐截面按同账户、同代码检查跨市场正负对应，有对应则保留计算；单纯负份额或负市值未计入该截面期初、期末金额。单笔基金买卖交易金额超过该账户当日净规模30%时标记异常，排除本页买卖统计、标记、后续变动及持仓推算；恰好30%保留。判断使用分摊前完整账户规模，缺日沿用此前最近有效报送值，首报前无法核验的成交保留并提示。跨市场对应基金的个券持仓合并计算，行情及成交仍按原市场分别展示；原始记录及筛选原因可查。指数展示到行情最新日，持仓与仓位止于分析期末；上下图使用有效行情日期与该类实际交易日期的合集；无行情且无交易的日期不补值，缺价交易日保留持仓，价格线跨空值连接，原始空值不填价格。卡片期初、期末实际持仓分别取对应截面明细市值，与交易金额累计的推算持仓分开列示。期末逐账户、逐品类核对，绝对偏差÷实际持仓绝对值超过10%即提示，不设金额门槛；实际为零且推算非零也提示，不调整曲线凑平。共管分摊前后偏差比例相同。指数属于参考市场走势，非该账户收益曲线。</p></details></div></div></div>`;}
 function initIndexReplayTab(result){
   const root=document.getElementById('indexReplay');if(!root)return;
   let idx=indexReplayModels.get(result);if(!idx){idx=IndexReplay.build(result);indexReplayModels.set(result,idx);}indexReplayContext={root,result,idx,scope:null};
@@ -5025,6 +5065,7 @@ function initIndexReplayTab(result){
       else if(button.dataset.irAction==='record-page'){st.recordPage=Number(button.dataset.page);renderIndexReplayRecords();}
       else if(button.dataset.irAction==='clear-date'){st.recordDate='';st.recordPage=1;renderIndexReplayRecords();}
       else if(button.dataset.irAction==='unknown'){st.recordKind='unknown';st.recordDate='';st.recordPage=1;root.querySelector('#irRecordKind').value='unknown';root.querySelector('#irRecords').open=true;renderIndexReplayRecords();}
+      else if(button.dataset.irAction==='exceptions'){st.recordKind='exceptions';st.recordDate='';st.recordPage=1;root.querySelector('#irRecordKind').value='exceptions';root.querySelector('#irRecords').open=true;renderIndexReplayRecords();}
     });
   }
   renderIndexReplay();
@@ -5038,7 +5079,9 @@ function renderIndexReplay(){
   ctx.scope=IndexReplay.scope(idx,s);root.querySelector('#irMessage').textContent='';
   const subject=s.level==='account'?idx.accounts.get(s.account)?.name||'无账户':s.level==='manager'?idx.managers.find(m=>m.key===s.manager)?.name||'无经理':s.dept==='all'?'全部部门':s.dept;
   root.querySelector('#irContext').textContent=`${subject} · ${ctx.scope.selected.length}个账户${s.level==='manager'?'，共管按1/N分摊':''}；持仓推算 ${idx.start||'待提供期初日期'} 至 ${idx.end||'待提供期末日期'}；指数 ${idx.market.start||'未上传'}${idx.market.end?' 至 '+idx.market.end:''}`;
-  root.querySelector('#irCategories').innerHTML=IndexReplay.CATEGORIES.map(c=>{const t=ctx.scope.totals[c.key];return`<button type="button" role="tab" aria-selected="${s.category===c.key}" data-ir-category="${c.key}"><strong>${c.label}</strong><span>净${t.net>=0?'买入':'卖出'} ${irMoney(Math.abs(t.net))}亿</span><span class="ir-actual-start">期初实际 ${irMoney(idx.hasStartSnapshot?ctx.scope.opening[c.key]:null)}亿</span><span class="ir-actual-end">期末实际 ${irMoney(idx.hasEndSnapshot?ctx.scope.actual[c.key]:null)}亿</span><span>推算期末 ${irMoney(t.projected)}亿</span><span class="ir-position-ratio">推算仓位 ${irPct(t.ratio)}</span></button>`;}).join('');
+  root.querySelector('#irCategories').innerHTML=IndexReplay.CATEGORIES.map(c=>{const t=ctx.scope.totals[c.key],filtered=ctx.scope.excluded.some(r=>r.bucket===c.key&&r.recordKind==='holding');return`<button type="button" role="tab" aria-selected="${s.category===c.key}" data-ir-category="${c.key}"><span class="ir-card-head"><strong>${c.label}</strong><span class="ir-position-ratio">推算仓位 ${irPct(t.ratio)}</span></span><span class="ir-card-holdings"><span class="ir-actual-start"><small>期初${filtered?'（筛选后）':'实际'}</small><b>${irMoney(idx.hasStartSnapshot?ctx.scope.opening[c.key]:null)}<small> 亿</small></b></span><span class="ir-card-arrow" aria-hidden="true">→</span><span class="ir-actual-end"><small>期末${filtered?'（筛选后）':'实际'}</small><b>${irMoney(idx.hasEndSnapshot?ctx.scope.actual[c.key]:null)}<small> 亿</small></b></span></span><span class="ir-card-foot"><span>净${t.net>=0?'买入':'卖出'} ${irMoney(Math.abs(t.net))}亿</span><span><small>推算期末</small> ${irMoney(t.projected)}亿</span></span></button>`;}).join('');
+  const excluded=ctx.scope.excluded.filter(r=>r.bucket===s.category),unverified=ctx.scope.unverified.filter(r=>r.bucket===s.category),holdings=excluded.filter(r=>r.recordKind==='holding'),flows=excluded.filter(r=>r.recordKind==='flow');
+  root.querySelector('#irQuality').innerHTML=excluded.length||unverified.length?`${holdings.length?`${holdings.length}条单纯负值基金持仓未计入对应截面；`:''}${flows.length?`${flows.length}笔基金买卖超过各自账户净规模30%，已排除买卖及持仓推算；`:''}${unverified.length?`${unverified.length}笔基金成交缺少此前有效净规模，保留计算、待核验；`:''}<button type="button" class="ir-link" data-ir-action="exceptions">查看本类筛选记录</button>`:'';
   drawIndexReplayChart();renderIndexReplayChecks();renderIndexReplayRecords();applyIndexReplayMode();
 }
 function applyIndexReplayMode(){
@@ -5080,11 +5123,11 @@ function renderIndexReplayChecks(){
 }
 function renderIndexReplayRecords(){
   const ctx=indexReplayContext;if(!ctx?.scope)return;const s=indexReplayState;let rows=[];
-  if(s.recordKind==='unknown')rows=ctx.scope.unknown;else if(s.recordKind==='flows')rows=ctx.scope.events.filter(e=>e.bucket===s.category&&(!s.recordDate||e.date===s.recordDate));else if(s.recordKind==='size'){for(const {account:a,weight:w}of ctx.scope.selected)rows.push(...a.positions.filter(p=>p.date>=ctx.idx.start&&p.date<=ctx.idx.end).map(p=>({...p,account:a.code,amount:p.size*w,weight:w,variety:'账户净规模'})));}else for(const {account:a,weight:w}of ctx.scope.selected)rows.push(...a.holdings[s.recordKind].filter(h=>h.bucket===s.category).map(h=>({...h,amount:h.amount*w,weight:w})));
+  if(s.recordKind==='unknown')rows=ctx.scope.unknown;else if(s.recordKind==='exceptions')rows=[...ctx.scope.excluded,...ctx.scope.unverified].filter(r=>r.bucket===s.category);else if(s.recordKind==='flows')rows=ctx.scope.events.filter(e=>e.bucket===s.category&&(!s.recordDate||e.date===s.recordDate));else if(s.recordKind==='size'){for(const {account:a,weight:w}of ctx.scope.selected)rows.push(...a.positions.filter(p=>p.date>=ctx.idx.start&&p.date<=ctx.idx.end).map(p=>({...p,account:a.code,amount:p.size*w,weight:w,variety:'账户净规模'})));}else for(const {account:a,weight:w}of ctx.scope.selected)rows.push(...a.holdings[s.recordKind].filter(h=>h.bucket===s.category).map(h=>({...h,amount:h.amount*w,weight:w})));
   s.recordPage=Math.max(1,Math.min(s.recordPage,Math.max(1,Math.ceil(rows.length/15))));ctx.root.querySelector('#irRecords summary').textContent=`查看对应持仓与流水${s.recordDate?' · '+s.recordDate:''}（${rows.length}条）`;
-  let html='<div class="table-container"><table><thead><tr><th>日期</th><th>账户</th><th>品种 / 方向</th><th>名称 / 代码</th><th>金额（亿元）</th><th>底稿位置</th></tr></thead><tbody>';
-  for(const r of rows.slice((s.recordPage-1)*15,s.recordPage*15)){const a=ctx.idx.accounts.get(r.account),src=r.source;html+=`<tr><td>${irEscape(r.date)}</td><td>${irEscape(a?.name||r.account)}<small>${irEscape(r.account)}</small></td><td>${irEscape(r.variety||({start:'期初持仓',end:'期末持仓'}[r.snapshot]||'持仓'))}<small>${irEscape(r.direction||'')}${r.weight&&r.weight!==1?' · 已按1/N分摊':''}</small></td><td>${irEscape(r.name)}<small>${irEscape(r.code)}</small></td><td class="text-right">${irMoney(r.amount)}</td><td>${irEscape(src?`${src.file||''} / ${src.sheet||''} / 第${src.row||'?'}行`:'未提供行号')}<small>${irEscape(r.tradeId||'')}</small></td></tr>`;}
-  if(!rows.length)html+='<tr><td colspan="6">没有对应记录。</td></tr>';ctx.root.querySelector('#irRecordTable').innerHTML=html+'</tbody></table></div>'+irPager(rows.length,s.recordPage,'record-page');
+  let html='<div class="table-container"><table><thead><tr><th>日期</th><th>账户</th><th>品种 / 方向</th><th>名称 / 代码</th><th>金额（亿元）</th><th>处理说明</th><th>底稿位置</th></tr></thead><tbody>';
+  for(const r of rows.slice((s.recordPage-1)*15,s.recordPage*15)){const a=ctx.idx.accounts.get(r.account),src=r.source;html+=`<tr><td>${irEscape(r.date)}</td><td>${irEscape(a?.name||r.account)}<small>${irEscape(r.account)}</small></td><td>${irEscape(r.variety||({start:'期初持仓',end:'期末持仓'}[r.snapshot]||'持仓'))}<small>${irEscape(r.direction||'')}${r.weight&&r.weight!==1?' · 已按1/N分摊':''}</small></td><td>${irEscape(r.name)}<small>${irEscape(r.code)} · ${irEscape(r.market||'')}</small></td><td class="text-right">${irMoney(r.amount)}</td><td class="${r.excluded?'ir-excluded':''}">${irEscape(r.reason||(r.recordKind==='holding'?'已计入持仓':'已计入计算'))}${r.tradeRatio!=null?`<small>单笔占比 ${irPct(r.tradeRatio)}；账户净规模 ${irMoney(r.netSize)}亿（分摊前）</small><small>规模报送日 ${irEscape(r.scaleDate)}</small>`:''}</td><td>${irEscape(src?`${src.file||''} / ${src.sheet||''} / 第${src.row||'?'}行`:'未提供行号')}<small>${irEscape(r.tradeId||'')}</small></td></tr>`;}
+  if(!rows.length)html+='<tr><td colspan="7">没有对应记录。</td></tr>';ctx.root.querySelector('#irRecordTable').innerHTML=html+'</tbody></table></div>'+irPager(rows.length,s.recordPage,'record-page');
 }
 // INDEX_REPLAY_UI_END
 
@@ -5118,7 +5161,7 @@ function renderBondMarketSection(){
     <div class="mr-table-controls"><input type="search" id="marketReplaySearch" placeholder="按债券、基金名称或代码筛选明细" aria-label="筛选买卖明细"><button type="button" data-mr-action="export">导出Excel</button></div>
     <div id="marketReplayTable"></div>
     <details id="marketReplayDetails" class="mr-details"><summary>逐笔卖出明细</summary><div id="marketReplayDetailTable"></div></details>
-    <details class="mr-method"><summary>计算口径</summary><p>使用清洗后的现券买卖及基金买卖，包含其中的转债、ETF和REITs；一级分销、回购、份额调整和期货不计入。成交价格均取流水“全价(元)”，基金“净价”不参与。债券按每百元面值全价、基金按每份成交价展示，卖出均价分别按面额、份额加权。债券后续变动=后续日终全价÷该笔卖出全价−1；基金后续变动=后续单位净值÷该笔卖出成交价−1，逐笔计算后按卖出金额加权。单位净值变动未加入分红和收益分配，净值恒为1的基金不能据此判断其实际收益。没有卖出的标的显示“—”。一周为7个自然日，一个月为对应日历日期，无值时取此前最近有值日，超过10天缺值不沿用。各标的使用所在行情表的截止日，未满期单独展示，不混入完整观察期。债券未加入期间票息及费用，基金亦未加入费用，均不等于账户已实现盈亏。月份只筛选成交，不截断后续观察期。下图按期初市值加累计买入（含一级）减卖出及回售推算持仓，除以整个账户净规模；交易月份不重置持仓。无行情且无交易日期不补持仓柱及仓位，缺价交易日保留持仓与成交标记，曲线直接连接有效值；行情空值保留，不影响后续价格变动原取价规则。个券选择也包含期初或期末持有、期间无二级成交的标的。</p></details>
+    <details class="mr-method"><summary>计算口径</summary><p>使用清洗后的现券买卖及基金买卖，包含其中的转债、ETF和REITs；一级分销、回购、份额调整和期货不计入。基金单笔交易金额超过账户当日净规模30%的成交标记异常，不进入本页买卖、后续变动及持仓推算；恰好30%保留，缺日规模沿用此前有效值，首报前无法核验的成交保留并提示。基金截面持仓先核对同账户同代码跨市场正负对应，单纯负值不计入期初及期末。成交价格均取流水“全价(元)”，基金“净价”不参与。债券按每百元面值全价、基金按每份成交价展示，卖出均价分别按面额、份额加权。债券后续变动=后续日终全价÷该笔卖出全价−1；基金后续变动=后续单位净值÷该笔卖出成交价−1，逐笔计算后按卖出金额加权。单位净值变动未加入分红和收益分配，净值恒为1的基金不能据此判断其实际收益。没有卖出的标的显示“—”。一周为7个自然日，一个月为对应日历日期，无值时取此前最近有值日，超过10天缺值不沿用。各标的使用所在行情表的截止日，未满期单独展示，不混入完整观察期。债券未加入期间票息及费用，基金亦未加入费用，均不等于账户已实现盈亏。月份只筛选成交，不截断后续观察期。下图按期初市值加累计买入（含一级）减卖出及回售推算持仓，除以整个账户净规模；交易月份不重置持仓。无行情且无交易日期不补持仓柱及仓位，缺价交易日保留持仓与成交标记，曲线直接连接有效值；行情空值保留，不影响后续价格变动原取价规则。个券选择也包含期初或期末持有、期间无二级成交的标的。</p></details>
     </div></div>`;
 }
 function mrAccountLabel(a){return `${a.name} [${a.code}]`;}
@@ -5126,8 +5169,8 @@ function mrBondLabel(g){return `${g.name} · ${g.code}${g.market==='?'?'':'.'+g.
 function initBondMarketTab(result){
   const root=document.getElementById('marketReplay');if(!root)return;
   const data=result.bondMarket||BondMarket.merge();
-  let idx=marketReplayIndexes.get(result);if(!idx){idx=BondMarket.index(result._store?.zq||[],data);marketReplayIndexes.set(result,idx);}
   let positionModel=indexReplayModels.get(result);if(!positionModel){positionModel=IndexReplay.build(result);indexReplayModels.set(result,positionModel);}
+  let idx=marketReplayIndexes.get(result);if(!idx){idx=BondMarket.index(IndexReplay.filterTrades(positionModel,result._store?.zq||[]),data);marketReplayIndexes.set(result,idx);}
   idx.accounts=[...positionModel.accounts.values()].map(a=>({...a,count:idx.accounts.find(x=>x.code===a.code)?.count||0,amount:idx.accounts.find(x=>x.code===a.code)?.amount||0})).sort((a,b)=>b.amount-a.amount||a.name.localeCompare(b.name,'zh-CN'));
   marketReplayContext={root,result,idx,positionModel,scope:null,groups:[],plotGroups:[]};
   if(marketReplayState.account&&!idx.accounts.some(a=>a.code===marketReplayState.account))marketReplayState.account='';
@@ -5164,6 +5207,7 @@ function initBondMarketTab(result){
       else if(action==='bond')mrSelectBond(button.dataset.key);
       else if(action==='detail'){mrSelectBond(button.dataset.key);root.querySelector('#marketReplayDetails').open=true;}
       else if(action==='export')exportMarketReplay();
+      else if(action==='exceptions'&&indexReplayContext){const st=indexReplayState;st.level='account';st.account=marketReplayState.account;st.view='index';st.category=marketReplayContext.position?.excluded[0]?.bucket||st.category;st.recordKind='exceptions';st.recordDate='';st.recordPage=1;indexReplayContext.root.querySelector('#irLevel').value='account';renderIndexReplay();indexReplayContext.root.querySelector('#irRecordKind').value='exceptions';indexReplayContext.root.querySelector('#irRecords').open=true;}
       else if(action==='sort'){
         const key=button.dataset.sort;marketReplayState.ascending=marketReplayState.sort===key?!marketReplayState.ascending:key==='name';marketReplayState.sort=key;marketReplayState.page=1;renderMarketReplayTable();
       }
@@ -5183,6 +5227,8 @@ function renderMarketReplay(){
   const ranges=['bond','fund'].filter(k=>state.kind==='all'||state.kind===k).map(k=>{const c=m.calendars?.[k];return c?.start?`${k==='fund'?'基金':'债券'} ${c.start} 至 ${c.end}`:'';}).filter(Boolean).join('；');
   root.querySelector('#marketReplayScope').textContent=`交易：${dates.length?dates[0]+' 至 '+dates.at(-1):'当前范围没有现券或基金买卖'}；行情：${ranges||'请在第五卡槽上传债券全价 / 基金单位净值文件'}`;
   root.querySelector('#marketReplayCoverage').textContent=`当前范围 ${ctx.scope.groups.length.toLocaleString()}只标的（债券${ctx.scope.groups.filter(g=>g.kind==='bond').length}、基金${ctx.scope.groups.filter(g=>g.kind==='fund').length}），${ctx.scope.coveredCount.toLocaleString()}只有行情，交易金额覆盖${ctx.scope.amount?(ctx.scope.coveredAmount/ctx.scope.amount*100).toFixed(1):'0.0'}%${m.stats.conflicts?`；${m.stats.conflicts}组同标的同日行情冲突未使用`:''}。`;
+  const excluded=ctx.positionModel.accounts.get(state.account)?.excluded.filter(r=>r.recordKind==='flow'&&(state.month==='all'||r.date.startsWith(state.month))&&(state.kind==='all'||r.kind===state.kind))||[];
+  if(excluded.length)root.querySelector('#marketReplayCoverage').textContent+=`另有${excluded.length}笔基金买卖超过账户净规模30%，未计入买卖表、成交标记及持仓推算。`;
   drawMarketReplayChart();renderMarketReplayTable();renderMarketReplayDetails();
 }
 function mrSelectBond(key){
@@ -5231,6 +5277,8 @@ function drawMarketReplayChart(){
   chart.on('click',param=>{if(param.data?.point){root.querySelector('#marketReplayMessage').textContent=`${param.data.point.date} ${param.data.point.direction} ${param.data.point.price.toFixed(4)}${unit}，${mrMoney(param.data.point.amount)}亿元。`;if(param.data.point.direction==='卖出')root.querySelector('#marketReplayDetails').open=true;}});
   const constantOne=g.kind==='fund'&&quoteSeries?.quotes.length&&quoteSeries.quotes.every(q=>Math.abs(q[1]-1)<1e-9);
   root.querySelector('#marketReplayChartNote').textContent=`${g.count}笔成交：买入${mrMoney(g.buy)}亿元、卖出${mrMoney(g.sell)}亿元；标记取流水全价，大小随成交金额变化${g.missingPlotPrices?`；${g.missingPlotPrices}笔缺成交全价，未绘制标记`:''}。${!quoteSeries?.quotes.length?'未提供有效行情，保留成交及持仓展示。':''}${position?'下图为期初市值加累计净买入（含一级、扣回售），除以整个账户净规模；月份只筛选成交，不重置持仓；有有效行情或实际交易的日期显示持仓，持仓止于分析期末。':'选择具体账户后查看持仓及仓位。'}${position?.flagged?`期末推算${irMoney(position.projected)}亿，实际${irMoney(position.actual)}亿，偏差${Number.isFinite(position.discrepancy)?irPct(position.discrepancy):'实际为0、推算非0'}，超过10%。`:''}${g.kind==='fund'?'基金参考线为单位净值，未包含分红及收益分配。':''}${constantOne?'该净值序列保持1.0000，零净值变化不代表零投资收益。':''}`;
+  if(position?.crossMarket)root.querySelector('#marketReplayChartNote').append(document.createTextNode('同账户同基金存在跨市场正负对应，持仓合并计算；行情、成交标记及买卖表仍按所选市场展示。'));
+  if(position?.excluded.length){root.querySelector('#marketReplayChartNote').append(document.createTextNode(`本基金另有${position.excluded.length}条记录按规则排除。`));const button=document.createElement('button');button.type='button';button.className='ir-link';button.dataset.mrAction='exceptions';button.textContent='查看筛选记录';root.querySelector('#marketReplayChartNote').append(button);}
 }
 function mrResultCell(g,period){
   const s=g[period];if(!s.total)return'—';

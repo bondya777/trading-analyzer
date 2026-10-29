@@ -54,9 +54,9 @@ test('leverage may produce a position ratio above 100 percent',()=>{
 test('market line can extend beyond analysis while future holdings and ratios remain missing',()=>{
  const s=I.scope(build(),all);assert(s.calendar.includes('2026-01-12'));assert.equal(s.daily.get('2026-01-12').values.credit.amount,null);assert.equal(s.daily.get('2026-01-12').values.credit.ratio,null);assert.equal(s.daily.get('2026-01-12').netSize,null);
 });
-test('convertible ETF beats equity ETF classification but a regular convertible fund stays other fund',()=>{
+test('convertible ETFs regular convertible funds and convertible feeder funds all follow the convertible index',()=>{
  const result=fixture({endFunds:[fund('DEMO_CONV','虚构可转债ETF','股票ETF'),fund('DEMO_NORMAL','虚构可转债债券基金'),fund('DEMO_LINK','虚构可转债ETF联接基金'),fund('DEMO_STOCK','虚构股票ETF','股票ETF'),fund('DEMO_GOLD','虚构黄金ETF','商品ETF'),fund('DEMO_REIT','虚构REIT','REITs')]});
- const meta=I.metadata(result._store),cat=code=>I.classify({code,market:'上交所'},'fund',meta);assert.equal(cat('DEMO_CONV'),'convertible');assert.equal(cat('DEMO_NORMAL'),'otherFund');assert.equal(cat('DEMO_LINK'),'otherFund');assert.equal(cat('DEMO_STOCK'),'equityFund');assert.equal(cat('DEMO_GOLD'),'otherFund');assert.equal(cat('DEMO_REIT'),'otherFund');
+ const meta=I.metadata(result._store),cat=code=>I.classify({code,market:'上交所'},'fund',meta);assert.equal(cat('DEMO_CONV'),'convertible');assert.equal(cat('DEMO_NORMAL'),'convertible');assert.equal(cat('DEMO_LINK'),'convertible');assert.equal(cat('DEMO_STOCK'),'equityFund');assert.equal(cat('DEMO_GOLD'),'otherFund');assert.equal(cat('DEMO_REIT'),'otherFund');
 });
 test('seven-year boundary missing term and greater-than-thirty-year rate bonds use confirmed buckets',()=>{
  const r=fixture({ending:[bond('DEMO_A','EXACT7',1000,'国债',7),bond('DEMO_A','OVER7',1000,'国债',7.01),bond('DEMO_A','OVER30',1000,'国债',50),bond('DEMO_A','MISSING',1000,'国债',0)]}),m=I.metadata(r._store);
@@ -124,7 +124,7 @@ test('individual zero actual nonzero estimate flags discrepancy and missing scal
  const r=fixture({pos:[position('2026-01-08',1)],ending:[bond('DEMO_A','DEMO_CREDIT',0)]}),idx=I.build(r),p=I.securityPosition(idx,'DEMO_A',{code:'DEMO_CREDIT',market:'IB',kind:'bond'});assert.equal(p.daily.get(first).amount,.1);assert.equal(p.daily.get(first).ratio,null);assert(p.flagged);assert.equal(p.discrepancy,Infinity);
 });
 test('science innovation debt ETFs remain other funds while equity science ETFs stay equity funds',()=>{
- const r=fixture({endFunds:[fund('DEMO_DEBT1','虚构科创债ETF'),fund('DEMO_DEBT2','虚构科创公司债ETF'),fund('DEMO_DEBT3','虚构科技创新债券ETF'),fund('DEMO_EQUITY','虚构科创50ETF'),fund('DEMO_CONV','虚构转债ETF')]});const m=I.metadata(r._store),cat=code=>I.classify({code,market:'上交所'},'fund',m);
+ const r=fixture({endFunds:[fund('DEMO_DEBT1','虚构科创债ETF'),fund('DEMO_DEBT2','虚构科创公司债ETF'),fund('DEMO_DEBT3','虚构科技创新债券ETF'),fund('DEMO_EQUITY','虚构科创50ETF','股票ETF'),fund('DEMO_CONV','虚构转债ETF')]});const m=I.metadata(r._store),cat=code=>I.classify({code,market:'上交所'},'fund',m);
  for(const c of ['DEMO_DEBT1','DEMO_DEBT2','DEMO_DEBT3'])assert.equal(cat(c),'otherFund');assert.equal(cat('DEMO_EQUITY'),'equityFund');assert.equal(cat('DEMO_CONV'),'convertible');
 });
 test('missing-day guide is a display annotation and never mutates raw quotes or later return pricing',()=>{
@@ -135,11 +135,51 @@ test('a missing-price trading day retains its true cash position and net trade w
  const r=fixture({flows:[flow('2026-01-06','买入',.2)]});r.indexMarket=quotes([first,'2026-01-08',last]);const idx=I.build(r),s=I.scope(idx,all),dates=I.plotDates(idx.market.series.get('credit').quotes,s.events,idx.start);
  assert(dates.includes('2026-01-06'));assert(!dates.includes('2026-01-07'));assert(Math.abs(s.daily.get('2026-01-06').values.credit.amount-.3)<1e-12);assert.equal(s.daily.get('2026-01-06').values.credit.net,.2);
 });
-test('negative source values are preserved and a cash outflow balance can be negative with zero actual shares',()=>{
+test('unpaired negative source holdings are excluded while profitable liquidation can still leave a negative cash projection',()=>{
  const r=fixture({opening:[],ending:[],startFunds:[{...fund('DEMO_NAV','虚构普通基金'),mv:1000}],endFunds:[{...fund('DEMO_NAV','虚构普通基金'),mv:0}],flows:[{...flow(last,'卖出',.11,'DEMO_A','DEMO_NAV','基金买卖'),_mkt:'上交所'}]});const idx=I.build(r),p=I.securityPosition(idx,'DEMO_A',{code:'DEMO_NAV',market:'SH',kind:'fund'});
  assert(Math.abs(p.projected+.01)<1e-12);assert.equal(p.actual,0);assert.equal(p.sell,.11);
- r._store.hdStart.funds[0].mv=-1000;r._store.zqAll=[];const n=I.securityPosition(I.build(r),'DEMO_A',{code:'DEMO_NAV',market:'SH',kind:'fund'});assert.equal(n.opening,-.1);assert.equal(n.sell,0);
+ r._store.hdStart.funds[0].mv=-1000;r._store.zqAll=[];const n=I.securityPosition(I.build(r),'DEMO_A',{code:'DEMO_NAV',market:'SH',kind:'fund'});assert.equal(n.opening,0);assert.equal(n.sell,0);assert.equal(n.excluded.length,1);assert.equal(n.excluded[0].amount,-.1);
 });
 test('zero opening metadata before account activity does not block another accounts valid department ratio',()=>{
  const r=fixture({hg:[{_code:'DEMO_A'},{_code:'DEMO_B'}],opening:[bond(),bond('DEMO_B','DEMO_CREDIT',0)],pos:[position(first,1),position(last,1,'DEMO_B')]}),s=I.scope(I.build(r),all);assert.equal(s.daily.get(first).missingSize,0);assert.equal(s.daily.get(first).values.credit.ratio,.1);
+});
+test('closing fund kind is authoritative and equity-like names do not invent a stock ETF category',()=>{
+ const r=fixture({endFunds:[fund('DEMO_THEME','虚构沪深300科创ETF','基金'),fund('DEMO_EXPLICIT','虚构名称','股票ETF'),fund('DEMO_PRIORITY','虚构可转债A','股票ETF')]}),m=I.metadata(r._store);
+ const cat=code=>I.classify({code,market:'SH'},'fund',m);assert.equal(cat('DEMO_THEME'),'otherFund');assert.equal(cat('DEMO_EXPLICIT'),'equityFund');assert.equal(cat('DEMO_PRIORITY'),'convertible');
+});
+test('closing fund kind crosses custody markets but does not use opening kind when the closing fund is absent',()=>{
+ const r=fixture({startFunds:[fund('DEMO_MOVED','虚构基金','基金'),fund('DEMO_GONE','虚构沪深300ETF','股票ETF')],endFunds:[{...fund('DEMO_MOVED','虚构基金','股票ETF'),market:'场外市场'}]});const idx=I.build(r);
+ assert.equal(idx.accounts.get('DEMO_A').holdings.start.find(h=>h.code==='DEMO_MOVED').bucket,'equityFund');assert.equal(idx.accounts.get('DEMO_A').holdings.start.find(h=>h.code==='DEMO_GONE').bucket,'otherFund');
+});
+test('bond type identifies exchangeable bonds before the rate classification and rate classification beats name guesses',()=>{
+ const r=fixture({ending:[{...bond('DEMO_A','DEMO_EXCHANGE',1000,'可交换债',9),rateClass:'信用债'},{...bond('DEMO_A','DEMO_RATECLASS',1000,'其他债券',9),rateClass:'利率债'},{...bond('DEMO_A','DEMO_CREDITCLASS',1000,'其他债券',9),rateClass:'信用债',name:'虚构国债相关名称'}]}),m=I.metadata(r._store);
+ assert.equal(I.classify({code:'DEMO_EXCHANGE',market:'IB'},'bond',m),'convertible');assert.equal(I.classify({code:'DEMO_RATECLASS',market:'IB'},'bond',m),'rateLong');assert.equal(I.classify({code:'DEMO_CREDITCLASS',market:'IB'},'bond',m),'credit');
+});
+test('fund negatives without a positive in another market are excluded separately at each snapshot without deleting source rows',()=>{
+ const r=fixture({startFunds:[{...fund('DEMO_NEG','虚构基金'),mv:-1000,quantity:-10}],endFunds:[{...fund('DEMO_NEG','虚构基金'),mv:2000,quantity:20}]});const before=JSON.stringify(r),idx=I.build(r),s=I.scope(idx,all),p=I.securityPosition(idx,'DEMO_A',{code:'DEMO_NEG',market:'SH',kind:'fund'});
+ assert.equal(s.opening.otherFund,0);assert.equal(s.actual.otherFund,.2);assert.equal(p.opening,0);assert.equal(p.actual,.2);assert.equal(s.excluded.length,1);assert.equal(s.excluded[0].snapshot,'start');assert.equal(JSON.stringify(r),before);
+});
+test('opposite signs from another account same market or a suffixed code cannot legitimize a negative holding',()=>{
+ const neg={...fund('000123','虚构基金'),mv:-1000,quantity:-10},others=[{...fund('000123','虚构基金'),acct:'DEMO_B',market:'场外市场'},{...fund('000123','虚构基金'),market:'上交所'},{...fund('000123!1','虚构基金'),market:'场外市场'}],rs=[neg,...others],checks=I.fundHoldingChecks(rs);
+ assert(checks.get(neg).excluded);assert(!checks.get(others[1]).excluded);assert(!checks.get(others[2]).excluded);
+});
+test('cross-market positive and negative holdings are retained as a fund position pool with normal buys and sells',()=>{
+ const start=[{...fund('000123','虚构基金'),market:'上交所',mv:-1000,face:-1000},{...fund('000123','虚构基金'),market:'场外市场',mv:3000,face:3000}],end=[{...start[0],mv:-2000},{...start[1],mv:5000}],flows=[{...flow('2026-01-06','买入',.2,'DEMO_A','000123','基金买卖'),_mkt:'上交所'},{...flow(last,'卖出',.1,'DEMO_A','000123','基金买卖'),_mkt:'场外市场'}],idx=build({startFunds:start,endFunds:end,flows}),s=I.scope(idx,all);
+ for(const market of ['SH','OF']){const p=I.securityPosition(idx,'DEMO_A',{code:'000123',market,kind:'fund'});assert(p.crossMarket);assert(Math.abs(p.opening-.2)<1e-12);assert(Math.abs(p.actual-.3)<1e-12);assert(Math.abs(p.projected-.3)<1e-12);assert.equal(p.buy,.2);assert.equal(p.sell,.1);assert(!p.flagged);}
+ assert.equal(s.excluded.length,0);assert(Math.abs(s.totals.otherFund.projected-.3)<1e-12);assert.equal(idx.accounts.get('DEMO_A').holdings.start.filter(h=>h.kind==='fund').length,2);
+});
+test('negative quantity is screened even when the reported market value is positive',()=>{
+ const idx=build({startFunds:[{...fund('DEMO_BADQ','虚构基金'),quantity:-1,mv:1000}]}),s=I.scope(idx,all);assert.equal(s.opening.otherFund,0);assert.equal(s.excluded[0].reasonCode,'negativeFundHolding');
+});
+test('only fund trades strictly above 30 percent are excluded from both replay amounts and individual sale observations',()=>{
+ const ff=(date,dir,amount)=>({...flow(date,dir,amount,'DEMO_A','DEMO_F','基金买卖'),_mkt:'上交所','全价(元)':1,'交易面额(万)':amount*10000});
+ const flows=[ff('2026-01-06','买入',.3),ff('2026-01-07','买入',.30001),ff('2026-01-08','卖出',.4),flow(last,'买入',.9)],r=fixture({flows,endFunds:[fund('DEMO_F','虚构普通基金')]}),idx=I.build(r),s=I.scope(idx,all),p=I.securityPosition(idx,'DEMO_A',{code:'DEMO_F',market:'SH',kind:'fund'}),filtered=I.filterTrades(idx,r._store.zqAll),table=M.summarize(M.index(filtered,M.merge()),'DEMO_A');
+ assert.equal(s.totals.otherFund.buy,.3);assert.equal(s.totals.otherFund.sell,0);assert.equal(s.totals.credit.buy,.9);assert.equal(s.excluded.filter(r=>r.reasonCode==='fundTradeOver30').length,2);assert.equal(p.buy,.3);assert.equal(p.sell,0);assert.equal(filtered.length,2);assert.equal(table.groups.find(g=>g.kind==='fund').sell,0);
+});
+test('fund trade screen uses the transaction-date scale and never a future scale or a manager fraction',()=>{
+ const f=(date,amount)=>({...flow(date,'买入',amount,'DEMO_A','DEMO_F','基金买卖'),_mkt:'上交所'}),idx=build({flows:[f('2026-01-06',.31),f('2026-01-08',.5)],pos:[position(first,1),position('2026-01-08',2)],dim:{DEMO_A:{line:'虚构部门',managers:['演示甲','演示乙']}}}),s=I.scope(idx,all),m=I.scope(idx,{level:'manager',dept:'all',manager:'虚构部门|演示甲'});
+ assert.equal(s.totals.otherFund.buy,.5);assert.equal(s.excluded[0].netSize,1);assert.equal(s.excluded[0].scaleDate,first);assert.equal(m.totals.otherFund.buy,.25);assert.equal(m.excluded[0].tradeRatio,.31);assert.equal(m.excluded[0].amount,.155);assert.equal(m.excluded[0].netSize,1);
+});
+test('a fund trade before the first scale is retained with an explicit unverified screen status',()=>{
+ const idx=build({flows:[{...flow('2026-01-06','买入',.8,'DEMO_A','DEMO_F','基金买卖'),_mkt:'上交所'}],pos:[position('2026-01-08',1)]}),s=I.scope(idx,all);assert.equal(s.totals.otherFund.buy,.8);assert.equal(s.excluded.length,0);assert.equal(s.unverified.length,1);assert.equal(s.unverified[0].reasonCode,'missingTradeSize');assert.equal(s.daily.get('2026-01-06').values.otherFund.ratio,null);
 });
