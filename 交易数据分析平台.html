@@ -411,7 +411,7 @@ th .th-sort:hover{color:#1d4ed8}
 @media(max-width:768px){.ir-card-holdings>span{display:flex;flex-direction:column;align-items:flex-start;gap:3px}.ir-card-holdings b{white-space:nowrap}.ir-card-holdings .ir-face-line{font-size:10px}.ir-card-foot{flex-direction:column;align-items:flex-start;gap:6px}.ir-card-foot>span{width:100%}.ir-card-foot>span:last-child{text-align:left}.ir-categories button{gap:9px}}
 
 </style>
-<meta name="trading-analyzer-release" content="2026.10.30.2">
+<meta name="trading-analyzer-release" content="2026.10.30.3">
 </head>
 <body>
 <div class="container">
@@ -2804,7 +2804,7 @@ function initChart(el){
 // BOND_MARKET_BEGIN
 // Generic local-only parsing and calculations. No embedded prices or account data.
 const BondMarket = (() => {
-  const VERSION='2026.10.30.2', DAY=86400000;
+  const VERSION='2026.10.30.3', DAY=86400000;
   const text=v=>v==null?'':String(v).trim();
   function number(v){
     if(typeof v==='number')return Number.isFinite(v)?v:null;
@@ -3003,7 +3003,7 @@ const BondMarket = (() => {
 // INDEX_REPLAY_BEGIN
 // Generic in-memory index replay. Contains no business records or embedded quotes.
 const IndexReplay=(()=>{
-  const VERSION='2026.10.30.2',EPS=1e-10;
+  const VERSION='2026.10.30.3',EPS=1e-10;
   const CATEGORIES=[
     {key:'rateShort',label:'利率债0—7年',code:'CBA33401.CS',name:'中债-0-7年国债及政策性金融债财富(总值)指数'},
     {key:'rateLong',label:'利率债7年以上',code:'CBA34301.CS',name:'中债-7-30年国债及政策性金融债财富(总值)指数'},
@@ -5191,10 +5191,11 @@ function drawIndexReplayChart(){
 function irPager(total,page,action){const pages=Math.max(1,Math.ceil(total/15));return`<div class="pager mr-pager"><span>共${total}条 · 每页15条 · 第${page}/${pages}页</span><div class="pager-btns"><button type="button" data-ir-action="${action}" data-page="${page-1}"${page<=1?' disabled':''}>上一页</button><button type="button" data-ir-action="${action}" data-page="${page+1}"${page>=pages?' disabled':''}>下一页</button></div></div>`;}
 function renderIndexReplayChecks(){
   const ctx=indexReplayContext;if(!ctx?.scope)return;const checks=ctx.scope.checks,s=indexReplayState;s.checkPage=Math.max(1,Math.min(s.checkPage,Math.max(1,Math.ceil(checks.length/15))));
+  const maturityByRow=new Map();for(const m of ctx.scope.maturities){const key=m.account+'|'+m.bucket;maturityByRow.set(key,(maturityByRow.get(key)||0)+m.amount);}
   ctx.root.querySelector('#irChecks summary').textContent=!ctx.idx.hasEndSnapshot?'期末核对：未上传期末持仓':checks.length?`期末核对：${new Set(checks.map(c=>c.account)).size}个账户、${checks.length}项偏差超过10%或缺面额`:'期末核对：六类推算持仓均未发现超过10%的偏差';
-  let html='<div class="table-container"><table><thead><tr><th>账户 / 品类</th><th>期初（核对口径）</th><th>买入含一级</th><th>卖出</th><th>回售</th><th>推算期末</th><th>实际期末</th><th>差额</th><th>偏差</th></tr></thead><tbody>';
-  for(const c of checks.slice((s.checkPage-1)*15,s.checkPage*15)){const cat=IndexReplay.CATEGORIES.find(x=>x.key===c.bucket);html+=`<tr><td><button type="button" class="ir-link" data-ir-check-account="${irEscape(c.account)}" data-ir-check-category="${c.bucket}">${irEscape(c.name)}</button><small>${irEscape(c.account)} · ${cat.label}${c.weight!==1?' · 共管分摊后':''}</small></td>${[c.opening,c.buy,c.sell,c.repay,c.projected,c.actual,c.diff].map(v=>`<td class="text-right">${irMoney(v)}</td>`).join('')}<td>${c.missingBasis?'缺面额，待核对':Number.isFinite(c.ratio)?irPct(c.ratio):'实际为0，推算非0'}</td></tr>`;}
-  if(!checks.length)html+='<tr><td colspan="9">没有超过10%的差异项。</td></tr>';ctx.root.querySelector('#irCheckTable').innerHTML='<p class="mr-context">单位：亿。债券核对面额，基金核对金额；转债混合类为债券面额加基金金额。持有到期未从推算扣除。逐账户核对，不抵消差额。</p>'+html+'</tbody></table></div>'+irPager(checks.length,s.checkPage,'check-page');
+  let html='<div class="table-container"><table><thead><tr><th>账户 / 品类</th><th>期初（核对口径）</th><th>买入含一级</th><th>卖出</th><th>回售</th><th>推算期末</th><th>持有到期（推定）</th><th>实际期末</th><th>差额</th><th>偏差</th></tr></thead><tbody>';
+  for(const c of checks.slice((s.checkPage-1)*15,s.checkPage*15)){const cat=IndexReplay.CATEGORIES.find(x=>x.key===c.bucket);html+=`<tr><td><button type="button" class="ir-link" data-ir-check-account="${irEscape(c.account)}" data-ir-check-category="${c.bucket}">${irEscape(c.name)}</button><small>${irEscape(c.account)} · ${cat.label}${c.weight!==1?' · 共管分摊后':''}</small></td>${[c.opening,c.buy,c.sell,c.repay,c.projected,maturityByRow.get(c.account+'|'+c.bucket)||0,c.actual,c.diff].map(v=>`<td class="text-right">${irMoney(v)}</td>`).join('')}<td>${c.missingBasis?'缺面额，待核对':Number.isFinite(c.ratio)?irPct(c.ratio):'实际为0，推算非0'}</td></tr>`;}
+  if(!checks.length)html+='<tr><td colspan="10">没有超过10%的差异项。</td></tr>';ctx.root.querySelector('#irCheckTable').innerHTML='<p class="mr-context">单位：亿。债券核对面额，基金核对金额；转债混合类为债券面额加基金金额。持有到期按本行账户、品类汇总债券推定本金面额，沿用共管分摊，仅展示，不扣减推算期末，也不改变差额及偏差。逐账户核对，不抵消差额。</p>'+html+'</tbody></table></div>'+irPager(checks.length,s.checkPage,'check-page');
 }
 function renderIndexReplayRecords(){
   const ctx=indexReplayContext;if(!ctx?.scope)return;const s=indexReplayState;let rows=[];

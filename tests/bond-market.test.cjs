@@ -107,7 +107,7 @@ test('fifth-slot parsing accepts quote-only and mixed-information workbooks',()=
 });
 test('module adds no networking or persistent business storage',()=>{
  const ui=html.match(/\/\/ BOND_MARKET_UI_BEGIN([\s\S]*?)\/\/ BOND_MARKET_UI_END/)[1];
- assert(!/\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|localStorage|sessionStorage|indexedDB|setWidgetState/.test(moduleSource+ui));assert(html.includes('每页15条'));assert(html.includes('trading-analyzer-release" content="2026.10.30.2'));
+ assert(!/\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|localStorage|sessionStorage|indexedDB|setWidgetState/.test(moduleSource+ui));assert(html.includes('每页15条'));assert(html.includes('trading-analyzer-release" content="2026.10.30.3'));
 });
 
 const fundData=(rows,codes=['000123.OF'],names=['虚构基金'])=>M.merge([M.parseSheet(sheet(rows,codes,names),'fictional-quotes.xlsx','基金')]);
