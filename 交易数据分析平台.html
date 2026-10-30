@@ -411,7 +411,7 @@ th .th-sort:hover{color:#1d4ed8}
 @media(max-width:768px){.ir-card-holdings>span{display:flex;flex-direction:column;align-items:flex-start;gap:3px}.ir-card-holdings b{white-space:nowrap}.ir-card-holdings .ir-face-line{font-size:10px}.ir-card-foot{flex-direction:column;align-items:flex-start;gap:6px}.ir-card-foot>span{width:100%}.ir-card-foot>span:last-child{text-align:left}.ir-categories button{gap:9px}}
 
 </style>
-<meta name="trading-analyzer-release" content="2026.10.30.1">
+<meta name="trading-analyzer-release" content="2026.10.30.2">
 </head>
 <body>
 <div class="container">
@@ -2804,7 +2804,7 @@ function initChart(el){
 // BOND_MARKET_BEGIN
 // Generic local-only parsing and calculations. No embedded prices or account data.
 const BondMarket = (() => {
-  const VERSION='2026.10.30.1', DAY=86400000;
+  const VERSION='2026.10.30.2', DAY=86400000;
   const text=v=>v==null?'':String(v).trim();
   function number(v){
     if(typeof v==='number')return Number.isFinite(v)?v:null;
@@ -3003,7 +3003,7 @@ const BondMarket = (() => {
 // INDEX_REPLAY_BEGIN
 // Generic in-memory index replay. Contains no business records or embedded quotes.
 const IndexReplay=(()=>{
-  const VERSION='2026.10.30.1',EPS=1e-10;
+  const VERSION='2026.10.30.2',EPS=1e-10;
   const CATEGORIES=[
     {key:'rateShort',label:'利率债0—7年',code:'CBA33401.CS',name:'中债-0-7年国债及政策性金融债财富(总值)指数'},
     {key:'rateLong',label:'利率债7年以上',code:'CBA34301.CS',name:'中债-7-30年国债及政策性金融债财富(总值)指数'},
@@ -3194,18 +3194,20 @@ const IndexReplay=(()=>{
     const selected=selections(idx,state),opening=Object.fromEntries(keys.map(k=>[k,0])),actual=Object.fromEntries(keys.map(k=>[k,0])),events=[],unknown=[],checks=[],excluded=[],unverified=[],maturities=[],allBondEvents=[];
     const totals=Object.fromEntries(keys.map(k=>[k,{buy:0,sell:0,repay:0,net:0,base:0,actualBasis:0,bondNet:0,fundNet:0,projected:0,missingBasis:0,actual:0,ratio:null}])) ;
     const bondSummary={opening:0,actual:0,openingFace:0,actualFace:0,buy:0,sell:0,net:0,projected:0,maturity:0,missingBasis:0,missingOpening:0,missingActual:0,missingNet:0};
+    const fundSummary={opening:0,actual:0,buy:0,sell:0,net:0,projected:0};
     for(const {account:a,weight:w}of selected){
       const end=Object.fromEntries(keys.map(k=>[k,0])),actualBasis={...end},missing={...end},actualMissing={...end};
       for(const k of keys){opening[k]+=a.opening[k]*w;actual[k]+=a.actual[k]*w;totals[k].actual+=a.actual[k]*w;}
       for(const [which,rows]of [['start',a.holdings.start],['end',a.holdings.end]])for(const h of rows){if(h.excluded)continue;const b=basis(h),k=h.bucket;
         if(h.kind==='bond'){bondSummary[which==='start'?'opening':'actual']+=h.amount*w;if(b==null&&Math.abs(h.amount)>EPS){bondSummary[which==='start'?'missingOpening':'missingActual']++;if(which==='start')bondSummary.missingBasis++;}else bondSummary[which==='start'?'openingFace':'actualFace']+=(b||0)*w;}
+        if(h.kind==='fund')fundSummary[which==='start'?'opening':'actual']+=h.amount*w;
         if(!k)continue;if(b==null&&Math.abs(h.amount)>EPS){if(which==='start')missing[k]++;else actualMissing[k]++;continue;}
         if(which==='start'){end[k]+=(b||0);totals[k].base+=(b||0)*w;}else{actualBasis[k]+=(b||0);totals[k].actualBasis+=(b||0)*w;}
       }
       for(const e of a.events){const b=basis(e);events.push({...e,amount:e.amount*w,faceAmount:e.faceAmount==null?null:e.faceAmount*w,basis:b==null?null:b*w,weight:w});if(b==null)missing[e.bucket]++;else end[e.bucket]+=signed(e)*b;}
       for(const u of a.unknown)if(u.recordKind!=='flow'||u.date>idx.start&&u.date<=idx.end)unknown.push({...u,amount:u.amount*w});
       for(const [target,rows]of [[excluded,a.excluded],[unverified,a.unverified]])for(const r of rows)target.push({...r,amount:r.amount*w,weight:w});
-      for(const e of [...a.events,...a.unknown.filter(e=>e.recordKind==='flow')])if(e.kind==='bond')allBondEvents.push({...e,faceAmount:e.faceAmount==null?null:e.faceAmount*w});
+      for(const e of [...a.events,...a.unknown.filter(e=>e.recordKind==='flow')]){if(e.kind==='bond')allBondEvents.push({...e,faceAmount:e.faceAmount==null?null:e.faceAmount*w});else if(e.kind==='fund'&&['buy','sell'].includes(e.action))fundSummary[e.action]+=e.amount*w;}
       for(const m of a.maturities||[])maturities.push({...m,amount:m.amount*w,weight:w});
       if(idx.hasEndSnapshot)for(const k of keys){const diff=end[k]-actualBasis[k],ratio=Math.abs(actualBasis[k])>EPS?Math.abs(diff)/Math.abs(actualBasis[k]):Math.abs(diff)>EPS?Infinity:0;
         if(ratio>.1+1e-10||missing[k]||actualMissing[k])checks.push({account:a.code,name:a.name,bucket:k,projected:missing[k]?null:cleanZero(end[k]*w),actual:actualMissing[k]?null:actualBasis[k]*w,diff:missing[k]||actualMissing[k]?null:diff*w,ratio:missing[k]||actualMissing[k]?null:ratio,missingBasis:missing[k]+actualMissing[k],weight:w,opening:totalsFor(a,k,'start')*w,buy:a.events.filter(e=>e.bucket===k&&e.action==='buy').reduce((n,e)=>n+(basis(e)||0)*w,0),sell:a.events.filter(e=>e.bucket===k&&e.action==='sell').reduce((n,e)=>n+(basis(e)||0)*w,0),repay:a.events.filter(e=>e.bucket===k&&e.action==='repay').reduce((n,e)=>n+(basis(e)||0)*w,0)});
@@ -3227,7 +3229,9 @@ const IndexReplay=(()=>{
       daily.set(d,{date:d,values,netSize:d<=idx.end?netSize:null,missingSize,carriedSize,oldestScaleDate,eligible});
     }
     for(const e of allBondEvents){if(e.faceAmount==null){bondSummary.missingBasis++;if(e.action!=='repay')bondSummary.missingNet++;}else if(e.action==='buy')bondSummary.buy+=e.faceAmount;else if(e.action==='sell')bondSummary.sell+=e.faceAmount;}bondSummary.net=cleanZero(bondSummary.buy-bondSummary.sell);bondSummary.projected=bondSummary.missingBasis?null:cleanZero(bondSummary.openingFace+allBondEvents.reduce((n,e)=>n+signed(e)*(e.faceAmount||0),0));bondSummary.maturity=maturities.reduce((n,m)=>n+m.amount,0);
-    const out={selected,opening,actual,events,unknown,checks,excluded,unverified,maturities,bondSummary,calendar,daily,totals};if(idx.cache.size>=12)idx.cache.delete(idx.cache.keys().next().value);idx.cache.set(ck,out);return out;
+    fundSummary.net=cleanZero(fundSummary.buy-fundSummary.sell);fundSummary.projected=cleanZero(fundSummary.opening+fundSummary.net);
+    const totalSummary={opening:cleanZero(bondSummary.opening+fundSummary.opening),actual:cleanZero(bondSummary.actual+fundSummary.actual),net:bondSummary.missingNet?null:cleanZero(bondSummary.net+fundSummary.net),projected:bondSummary.projected==null?null:cleanZero(bondSummary.projected+fundSummary.projected),maturity:bondSummary.maturity};
+    const out={selected,opening,actual,events,unknown,checks,excluded,unverified,maturities,bondSummary,fundSummary,totalSummary,calendar,daily,totals};if(idx.cache.size>=12)idx.cache.delete(idx.cache.keys().next().value);idx.cache.set(ck,out);return out;
   }
   function securityOptions(idx,account,groups,kind='all'){
     const selected=typeof account==='object'?selections(idx,account):idx.accounts.has(account)?[{account:idx.accounts.get(account),weight:1}]:[];if(!selected.length)return groups;
@@ -5103,7 +5107,8 @@ const irAccountLabel=a=>`${a.name} [${a.code}]`;
 function irBasisLabel(key){return key==='convertible'?'（债券面额＋基金金额）':['rateShort','rateLong','credit'].includes(key)?'（面额）':'（金额）';}
 function irNetLabel(t,key){if(t.missingBasis)return'净买卖待核对面额';const text=(n,label)=>`${label}净${n>=0?'买入':'卖出'} ${irMoney(Math.abs(n))}亿`;return key==='convertible'?`${text(t.bondNet||0,'债券面额')}<br>${text(t.fundNet||0,'基金金额')}`:text(t.net||0,['rateShort','rateLong','credit'].includes(key)?'面额':'金额');}
 function irFaceLine(key,which){if(!['rateShort','rateLong','credit','convertible'].includes(key))return'';const ctx=indexReplayContext;let total=0,missing=false;for(const {account:a,weight:w}of ctx.scope.selected)for(const h of a.holdings[which])if(h.bucket===key&&h.kind==='bond'&&!h.excluded){if(h.faceAmount==null&&Math.abs(h.amount)>1e-10)missing=true;total+=(h.faceAmount||0)*w;}return `<small class="ir-face-line">债券面额 ${irMoney(missing?null:total)}亿</small>`;}
-function renderBondSummary(){const ctx=indexReplayContext,b=ctx.scope.bondSummary;ctx.root.querySelector('#irBondSummary').innerHTML=`<div class="ir-summary-heading"><strong>全部债券</strong><small>含利率、信用、转债及ABS；不含基金</small></div><div class="ir-summary-metrics"><div><small>期初实际市值</small><b>${irMoney(ctx.idx.hasStartSnapshot?b.opening:null)}<em> 亿</em></b><span>面额 ${irMoney(b.missingOpening?null:b.openingFace)}亿</span></div><div><small>期末实际市值</small><b>${irMoney(ctx.idx.hasEndSnapshot?b.actual:null)}<em> 亿</em></b><span>面额 ${irMoney(b.missingActual?null:b.actualFace)}亿</span></div><div><small>净${b.net>=0?'买入':'卖出'}面额</small><b>${irMoney(b.missingNet?null:Math.abs(b.net))}<em> 亿</em></b><span>按买入面额−卖出面额</span></div><div><small>推算期末面额</small><b>${irMoney(b.projected)}<em> 亿</em></b><span>期初面额＋净买卖−回售</span></div><div><small>持有到期（推定）</small><b>${irMoney(b.maturity)}<em> 亿面额</em></b><button type="button" class="ir-link" data-ir-action="maturity">${ctx.scope.maturities.length}项 · 仅单列，不扣减</button></div></div>`;}
+function renderBondSummary(){const ctx=indexReplayContext,b=ctx.scope.bondSummary,f=ctx.scope.fundSummary,t=ctx.scope.totalSummary,filtered=which=>ctx.scope.excluded.some(r=>r.recordKind==='holding'&&r.snapshot===which);ctx.root.querySelector('#irBondSummary').innerHTML=`<div class="ir-summary-heading"><strong>总持仓</strong><small>含债券及基金（ETF、REITs等）；净买卖、推算按债券面额＋基金金额</small></div><div class="ir-summary-metrics"><div><small>期初${filtered('start')?'市值（筛选后）':'实际市值'}</small><b>${irMoney(ctx.idx.hasStartSnapshot?t.opening:null)}<em> 亿</em></b><span>债券市值 ${irMoney(b.opening)}亿 · 基金 ${irMoney(f.opening)}亿</span><span>债券面额 ${irMoney(b.missingOpening?null:b.openingFace)}亿</span></div><div><small>期末${filtered('end')?'市值（筛选后）':'实际市值'}</small><b>${irMoney(ctx.idx.hasEndSnapshot?t.actual:null)}<em> 亿</em></b><span>债券市值 ${irMoney(b.actual)}亿 · 基金 ${irMoney(f.actual)}亿</span><span>债券面额 ${irMoney(b.missingActual?null:b.actualFace)}亿</span></div><div><small>净${t.net==null?'买卖':t.net>=0?'买入':'卖出'}（债券＋基金）</small><b>${irMoney(t.net==null?null:Math.abs(t.net))}<em> 亿</em></b><span>债券面额 ${irMoney(b.missingNet?null:b.net)}亿</span><span>基金金额 ${irMoney(f.net)}亿</span></div><div><small>推算期末（债券＋基金）</small><b>${irMoney(t.projected)}<em> 亿</em></b><span>债券面额 ${irMoney(b.projected)}亿</span><span>基金金额 ${irMoney(f.projected)}亿</span></div><div><small>持有到期（债券推定）</small><b>${irMoney(t.maturity)}<em> 亿面额</em></b><button type="button" class="ir-link" data-ir-action="maturity">${ctx.scope.maturities.length}项 · 仅单列，不扣减</button></div></div>`;}
+
 function renderIndexReplaySection(){return `<div class="card" id="indexReplay" data-release="${IndexReplay.VERSION}"><div class="card-header"><div class="card-title">指数与交易复盘</div></div><div class="card-body">
   <div class="ir-controls"><label>观察层级<select id="irLevel"><option value="department">部门</option><option value="manager">投资经理</option><option value="account">单个账户</option></select></label><label>部门<select id="irDepartment"></select></label><label id="irManagerControl" hidden>投资经理<select id="irManager"></select></label><label id="irAccountControl" hidden>账户<input id="irAccount" list="irAccounts" autocomplete="off" placeholder="输入名称或项目编号"><datalist id="irAccounts"></datalist></label></div>
   <div id="irManagerAccountControl" class="ir-manager-account" hidden><label>经理名下账户<input id="irManagerAccount" list="irManagerAccounts" autocomplete="off" placeholder="全部名下账户，输入名称或项目编号"><datalist id="irManagerAccounts"></datalist></label></div>

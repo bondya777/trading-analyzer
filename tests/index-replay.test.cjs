@@ -232,3 +232,23 @@ test('scoped single-security trading tables split cash and face equally without 
 test('unknown bond face cannot silently become a zero amount or be reverse-derived from trade cash',()=>{
  const r=fixture({flows:[{...flow('2026-01-06','买入',.1),'交易面额(万)':null}]});const s=I.scope(I.build(r),all);assert.equal(s.totals.credit.projected,null);assert.equal(s.daily.get(last).values.credit.ratio,null);assert.equal(s.bondSummary.projected,null);assert.equal(s.checks[0].missingBasis,1);
 });
+
+test('total holding summary includes bond and every fund category while keeping their agreed bases',()=>{
+ const codes=['DEMO_CF','DEMO_EQ','DEMO_OTHER'],names=['虚构可转债A','虚构股票ETF','虚构REITs'],kinds=['基金','股票ETF','REITs'];
+ const start=codes.map((code,i)=>({...fund(code,names[i],kinds[i]),mv:1000})),end=start.map(h=>({...h,mv:1200}));
+ const flows=[flow('2026-01-06','买入',.02),...codes.map((code,i)=>({...flow('2026-01-06','买入',.03,'DEMO_A',code,'基金买卖'),_mkt:'SH',_name2:names[i]}))];
+ const s=I.scope(build({opening:[{...bond(),mv:1100,face:1000}],ending:[{...bond(),mv:1400,face:1200}],startFunds:start,endFunds:end,flows}),all),t=s.totalSummary;
+ for(const[k,v]of Object.entries({opening:.41,actual:.5,net:.11,projected:.51,maturity:0}))assert(Math.abs(t[k]-v)<1e-12,k);
+ assert(Math.abs(s.fundSummary.projected-.39)<1e-12);assert(Math.abs(s.bondSummary.projected-.12)<1e-12);assert(Math.abs(s.totals.convertible.projected-.13)<1e-12);assert(Math.abs(s.totals.equityFund.projected-.13)<1e-12);assert(Math.abs(s.totals.otherFund.projected-.13)<1e-12);
+});
+test('total summary applies fund holding and trade screening before addition and shared-manager weighting',()=>{
+ const neg={...fund('DEMO_NEG','虚构负值基金'),mv:-2000},valid={...fund('DEMO_F','虚构基金'),mv:1000},flows=[{...flow('2026-01-06','买入',.31,'DEMO_A','DEMO_F','基金买卖'),_mkt:'SH'},{...flow(last,'卖出',.02,'DEMO_A','DEMO_F','基金买卖'),_mkt:'SH'}];
+ const idx=build({startFunds:[neg,valid],endFunds:[{...valid,mv:800}],flows,dim:{DEMO_A:{line:'虚构部门',managers:['甲','乙']}}}),s=I.scope(idx,all),m=I.scope(idx,{level:'manager',dept:'all',manager:'虚构部门|甲',managerAccount:'DEMO_A'});
+ assert(Math.abs(s.totalSummary.opening-.2)<1e-12);assert(Math.abs(s.totalSummary.actual-.18)<1e-12);assert(Math.abs(s.totalSummary.net+.02)<1e-12);assert(Math.abs(s.totalSummary.projected-.18)<1e-12);
+ for(const k of ['opening','actual','net','projected','maturity'])assert(Math.abs(m.totalSummary[k]-s.totalSummary[k]/2)<1e-12,k);assert.equal(s.excluded.length,2);
+});
+test('fund-only accounts populate total holdings and missing bond face never becomes a partial total estimate',()=>{
+ const f={...fund('DEMO_ONLY','虚构基金'),mv:1000},r=fixture({opening:[],ending:[],startFunds:[f],endFunds:[{...f,mv:2500}],flows:[{...flow('2026-01-06','买入',.2,'DEMO_A','DEMO_ONLY','基金买卖'),_mkt:'SH'},{...flow(last,'卖出',.05,'DEMO_A','DEMO_ONLY','基金买卖'),_mkt:'SH'}]});
+ let s=I.scope(I.build(r),all);assert.equal(s.bondSummary.projected,0);assert(Math.abs(s.totalSummary.projected-.25)<1e-12);assert(Math.abs(s.totalSummary.net-.15)<1e-12);
+ r._store.hdStart.bonds=[{...bond(),face:null}];s=I.scope(I.build(r),all);assert.equal(s.totalSummary.projected,null);assert(Math.abs(s.fundSummary.projected-.25)<1e-12);
+});
