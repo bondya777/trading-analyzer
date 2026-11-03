@@ -410,8 +410,17 @@ th .th-sort:hover{color:#1d4ed8}
 @media(max-width:1000px){.ir-summary-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:768px){.ir-summary-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.ir-summary-heading{flex-wrap:wrap;gap:5px}.ir-summary-metrics b{font-size:18px}.ir-bond-summary{padding:12px}}
 @media(max-width:768px){.ir-card-holdings>span{display:flex;flex-direction:column;align-items:flex-start;gap:3px}.ir-card-holdings b{white-space:nowrap}.ir-card-holdings .ir-face-line{font-size:10px}.ir-card-foot{flex-direction:column;align-items:flex-start;gap:6px}.ir-card-foot>span{width:100%}.ir-card-foot>span:last-child{text-align:left}.ir-categories button{gap:9px}}
 
+/* MANAGER_REVIEW_CSS_BEGIN */
+.mv-review{margin:18px 0 24px;padding:18px 20px;border:1px solid #dbe5f1;border-radius:10px;background:#f8fafc;color:#334155;}
+.mv-heading{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:#0f172a;}.mv-heading strong{font-size:17px;}.mv-heading small{font-size:12px;color:#64748b;}
+.mv-review h4{font-size:14px;margin:20px 0 8px;color:#1e3a5f;}.mv-intro,.mv-paragraph,.mv-event p{font-size:13px;line-height:1.95;margin:8px 0;overflow-wrap:anywhere;}
+.mv-event{border-left:3px solid #cbd5e1;padding:2px 0 8px 14px;margin:12px 0;}.mv-event .ir-link{font-size:12px;}.mv-more{margin-top:12px;}.mv-more summary{font-size:13px;color:#2563eb;cursor:pointer;}
+.mv-facts{display:flex;flex-wrap:wrap;gap:12px 24px;margin:12px 0;font-size:12px;}.mv-facts b{display:block;font-size:14px;}.mv-review .table-container{background:#fff;}.mgr-sort{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;white-space:normal;text-align:inherit;}.mgr-sort:hover{color:#2563eb;}
+@media(max-width:640px){.mv-review{padding:14px 12px;}.mv-review .mv-event{padding-left:9px;}.mv-review .table-container{max-width:100%;overflow-x:auto;}}
+/* MANAGER_REVIEW_CSS_END */
+
 </style>
-<meta name="trading-analyzer-release" content="2026.10.30.3">
+<meta name="trading-analyzer-release" content="2026.11.03.1">
 </head>
 <body>
 <div class="container">
@@ -2804,7 +2813,7 @@ function initChart(el){
 // BOND_MARKET_BEGIN
 // Generic local-only parsing and calculations. No embedded prices or account data.
 const BondMarket = (() => {
-  const VERSION='2026.10.30.3', DAY=86400000;
+  const VERSION='2026.11.03.1', DAY=86400000;
   const text=v=>v==null?'':String(v).trim();
   function number(v){
     if(typeof v==='number')return Number.isFinite(v)?v:null;
@@ -3003,7 +3012,7 @@ const BondMarket = (() => {
 // INDEX_REPLAY_BEGIN
 // Generic in-memory index replay. Contains no business records or embedded quotes.
 const IndexReplay=(()=>{
-  const VERSION='2026.10.30.3',EPS=1e-10;
+  const VERSION='2026.11.03.1',EPS=1e-10;
   const CATEGORIES=[
     {key:'rateShort',label:'利率债0—7年',code:'CBA33401.CS',name:'中债-0-7年国债及政策性金融债财富(总值)指数'},
     {key:'rateLong',label:'利率债7年以上',code:'CBA34301.CS',name:'中债-7-30年国债及政策性金融债财富(总值)指数'},
@@ -3706,7 +3715,7 @@ function renderSummary(summary){
 }
 
 function createTabs(){
-  const tabs=[{id:'overview',label:'总览'},{id:'hg',label:'回购业务'},{id:'type',label:'类型判定'},{id:'feature',label:'交易特征'},{id:'behavior',label:'交易行为'},{id:'compare',label:'账户对比'},{id:'eval',label:'做得怎么样'},{id:'risk',label:'风险监控'},{id:'dq',label:'数据质量'},{id:'manager',label:'投资经理'},{id:'story',label:'故事行为'},{id:'export',label:'报表输出'}];
+  const tabs=[{id:'overview',label:'总览'},{id:'hg',label:'回购业务'},{id:'feature',label:'交易特征'},{id:'behavior',label:'交易行为'},{id:'compare',label:'账户对比'},{id:'eval',label:'做得怎么样'},{id:'dq',label:'数据质量'},{id:'manager',label:'投资经理'},{id:'story',label:'故事行为'},{id:'export',label:'报表输出'}];
   const bar=document.getElementById('tabBar');
   bar.innerHTML=tabs.map((t,i)=>`<button class="tab ${i===0?'active':''}" data-tab="${t.id}">${t.label}</button>`).join('');
   bar.querySelectorAll('.tab').forEach(btn=>{btn.addEventListener('click',()=>switchTab(btn.dataset.tab))});
@@ -3789,21 +3798,19 @@ function renderAllTabs(result){
   disposeChartsIn(container);
   container.innerHTML=`<div class="tab-content active" id="tab-overview">${renderOverviewTab(result)}</div>
     <div class="tab-content" id="tab-hg">${renderHgTab(result)}</div>
-    <div class="tab-content" id="tab-type">${renderTypeTab(result)}</div>
     <div class="tab-content" id="tab-feature">${renderFeatureTab(result)}</div>
     <div class="tab-content" id="tab-behavior">${renderBehaviorTab(result)}</div>
     <div class="tab-content" id="tab-compare">${renderCompareTab(result)}</div>
     <div class="tab-content" id="tab-eval">${renderEvalTab(result)}</div>
-    <div class="tab-content" id="tab-risk">${renderRiskTab(result)}</div>
     <div class="tab-content" id="tab-dq">${renderDqTab(result)}</div>
     <div class="tab-content" id="tab-manager">${renderManagerTab(result)}</div>
     <div class="tab-content" id="tab-story">${renderStoryTab(result)}</div>
     <div class="tab-content" id="tab-export">${renderExportTab(result)}</div>`;
-  setTimeout(()=>{if(currentResult!==result||!container.isConnected)return;initCharts(result);initBondMarketTab(result);initIndexReplayTab(result);onTraderFilter('');initManagerTab(result);initStoryTab(result);initExportTab(result);requestAnimationFrame(resizeVisibleCharts)},100);
+  setTimeout(()=>{if(currentResult!==result||!container.isConnected)return;initCharts(result);initBondMarketTab(result);initIndexReplayTab(result);initRepoDaily(result);onTraderFilter('');initManagerTab(result);initStoryTab(result);initExportTab(result);requestAnimationFrame(resizeVisibleCharts)},100);
 }
 
 // ===== 批次2：投资经理页 =====
-const managerState={line:'投资顾问部',name:null,feeFrom:'',feeTo:'',acctTagFilter:null,acctSort:{col:-1,asc:true}};
+const managerState={line:'投资顾问部',name:null,feeFrom:'',feeTo:'',acctTagFilter:null,acctSort:{col:-1,asc:true},compareSort:{col:-1,asc:true}};
 // 收入效率：月均收入分母 = 收入区间内投顾费有成交确认记录的月份数
 function mgrFeeRangeMonths(){
   const mg=currentResult&&currentResult.manager;
@@ -3907,7 +3914,7 @@ function renderManagerTab(r){
     </div>
   </div></div>
   <div class="card"><div class="card-header"><div class="card-title">风格与风险画像（名下账户汇总）</div></div><div class="card-body"><div id="mgrStyleBox"><div class="empty-state">选择经理后展示</div></div></div></div>
-  <div class="card"><div class="card-header"><div class="card-title">同部门经理对比（点击行切换经理）</div></div><div class="card-body"><div id="mgrCompareWrap"></div></div></div>
+  <div class="card"><div class="card-header"><div class="card-title">同部门经理对比（点击表头排序，点击行切换经理）</div></div><div class="card-body"><div id="mgrCompareWrap"></div></div></div>
   <div class="card"><div class="card-header"><div class="card-title">名下账户清单（点击表头排序，点击代码跳完整画像）</div></div><div class="card-body"><div id="mgrAcctWrap"></div></div></div>`;
 }
 function mgrPool(line){
@@ -4005,7 +4012,8 @@ function refreshManagerPanel(){
   const cmpWrap=document.getElementById('mgrCompareWrap');
   if(cmpWrap){
     const avgOf=arr=>{const v=arr.filter(x=>x!=null);return v.length?Math.round(v.reduce((s,x)=>s+x,0)/v.length*100)/100:null};
-    const rows=pool.map(x=>{const ex=mgrIncomeExtras(x);return[x.name===managerState.name?`<strong>${x.name} ★</strong>`:x.name,x.acctCount,x.scale,x.income,ex.rate!=null?ex.rate:'-',ex.monthly!=null?ex.monthly:'-',x.stratRich,x.clientRich,x.turnover!=null?x.turnover:'-',x.retYtd!=null?x.retYtd+(x.retYtdMin!=null?`（${x.retYtdMin}~${x.retYtdMax}）`:''):'-']});
+    const data=pool.map(x=>{const ex=mgrIncomeExtras(x);return{values:[x.name,x.acctCount,x.scale,x.income,ex.rate,ex.monthly,x.stratRich,x.clientRich,x.turnover,x.retYtd],cells:[x.name===managerState.name?`<strong>${x.name} ★</strong>`:x.name,x.acctCount,x.scale,x.income,ex.rate!=null?ex.rate:'-',ex.monthly!=null?ex.monthly:'-',x.stratRich,x.clientRich,x.turnover!=null?x.turnover:'-',x.retYtd!=null?x.retYtd+(x.retYtdMin!=null?`（${x.retYtdMin}~${x.retYtdMax}）`:''):'-']}});
+    const sc=managerState.compareSort,rows=(sc.col<0?data:BusinessViews.sortRows(data,sc.col,sc.asc)).map(x=>x.cells);
     if(pool.length){
       const tot=[
         '<strong>合计</strong>',
@@ -4021,7 +4029,8 @@ function refreshManagerPanel(){
       ];
       rows.unshift(tot);
     }
-    cmpWrap.innerHTML=renderTable(['经理','管理账户数','管理规模(亿)','贡献收入(万)','隐含费率(万/亿)','月均收入(万/月)','策略丰富度','客群丰富度','月均换手率','今年以来平均收益率(%)'],
+    const headers=['经理','管理账户数','管理规模(亿)','贡献收入(万)','隐含费率(万/亿)','月均收入(万/月)','策略丰富度','客群丰富度','月均换手率','今年以来平均收益率(%)'].map((h,i)=>`<button type="button" class="mgr-sort" onclick="onMgrCompareSort(${i})" title="点击排序">${h}${sc.col===i?(sc.asc?' ↑':' ↓'):''}</button>`);
+    cmpWrap.innerHTML=renderTable(headers,
       rows,
       {rowClass:x=>x[0].includes('★')||x[0].includes('合计')?'anomaly-row':'',rowClick:x=>x[0].includes('合计')?'':`onMgrPick('${x[0].replace(/<[^>]*>/g,'').replace(' ★','')}')`});
   }
@@ -4743,10 +4752,7 @@ function renderHgTab(r){
       <div id="traderMonthWrap" style="margin-top:12px"></div>
     </div></div>`;
   }
-  return repoCard('回购业务分析',r.repoTopHg)+repoCard('协议回购分析',r.repoTopXy)
-    +`<div class="grid-2">${dirCard('正回购金额 Top5',r.hgZhengTop5)}${dirCard('逆回购金额 Top5',r.hgNiTop5)}</div>`
-    +traderHtml
-    +(r.repoAnalysis?`<div class="card"><div class="card-header"><div class="card-title">回购结构分析</div></div><div class="card-body">
+  const structure=(r.repoAnalysis?`<div class="card"><div class="card-header"><div class="card-title">回购结构分析</div></div><div class="card-body">
     <div class="grid-2">
       <div><div class="section-title" style="margin-top:0">期限结构（金额，亿元）</div><div id="chart-hg-term" class="chart"></div></div>
       <div><div class="section-title" style="margin-top:0">正回购 vs 逆回购</div><div id="chart-hg-dir" class="chart"></div></div>
@@ -4758,6 +4764,9 @@ function renderHgTab(r){
     <div class="section-title" style="margin-top:16px">部门分布（按账户归属映射）</div>
     ${renderTable(['部门','笔数','金额(亿元)'],r.repoAnalysis.depts.map(d=>[d.dept,d.count,d.amount]))}
   </div></div>`:'');
+  return structure+renderRepoDailySection()+repoCard('回购业务分析',r.repoTopHg)+repoCard('协议回购分析',r.repoTopXy)
+    +`<div class="grid-2">${dirCard('正回购金额 Top5',r.hgZhengTop5)}${dirCard('逆回购金额 Top5',r.hgNiTop5)}</div>`
+    +traderHtml;
 }
 // 交易员筛选：全部=笔数榜全量；选中=该交易员汇总行+月度笔数/金额明细
 function onTraderFilter(name){
@@ -4825,10 +4834,7 @@ function renderTypeTab(r){
     <div class="section-title" style="margin-top:16px">固收+/纯债 × 类型 交叉分布</div>
     ${renderTable(['','交易型','混合型','配置型'],[['固收+',cross['固收+']['交易型'],cross['固收+']['混合型'],cross['固收+']['配置型']],['纯债',cross['纯债']['交易型'],cross['纯债']['混合型'],cross['纯债']['配置型']]])}
   </div></div>
-  <div class="card"><div class="card-header"><div class="card-title">账户判定查询</div></div><div class="card-body">
-    <input id="styleQueryInput" type="text" placeholder="输入账户代码或名称，回车查看判定卡" style="width:100%;max-width:420px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px" onkeydown="if(event.key==='Enter')onStyleQuery()">
-    <div id="styleQueryOut" style="margin-top:12px"></div>
-  </div></div>`;
+  `;
   if(t&&t.accountTurnover.length>0){
     html+=`<div class="card"><div class="card-header"><div class="card-title">月度换手率分析（回购不计入）</div></div><div class="card-body">
       <p style="color:#64748b;font-size:13px;margin-bottom:12px">口径：现券买卖/基金买卖/国债期货的买入额、卖出额 ÷ 该账户当月平均规模；当月无规模数据的账户不参与该月统计；月均规模 &lt; 0.1 亿的账户不参与 Top10 排名</p>
@@ -4841,42 +4847,6 @@ function renderTypeTab(r){
     </div></details>`;
   }
   return html;
-}
-
-// 账户判定查询：输入代码/名称 → 判定卡（六信号原值+得分+判定+边界提示）
-function onStyleQuery(){
-  const el=document.getElementById('styleQueryInput');
-  const out=document.getElementById('styleQueryOut');
-  if(!el||!out)return;
-  const q=el.value.trim();
-  if(!q){out.innerHTML='';return}
-  const cands=findAccountCandidates(q);
-  if(!cands.length){out.innerHTML='<div class="empty-state">未找到匹配账户</div>';return}
-  const code=cands[0].code;
-  const r=currentResult;
-  const s=r.styleScores&&r.styleScores[code];
-  const id=r.identity&&r.identity.idMap&&r.identity.idMap[code];
-  if(!s||s.score==null){out.innerHTML=`<div class="empty-state">${code} 信号不足，未出判定（无任何可用信号）</div>`;return}
-  const nm=profileState.nameMap&&profileState.nameMap.get(code)||code;
-  const fmt=(v,suf)=>v!=null?`${v}${suf||''}`:'<span style="color:#94a3b8">缺失</span>';
-  const edge=(s.score>=STYLE_CFG.tradeMin-5&&s.score<STYLE_CFG.tradeMin)||(s.score>STYLE_CFG.configMax&&s.score<=STYLE_CFG.configMax+5);
-  out.innerHTML=`<div class="account-detail">
-    <div class="detail-header"><span class="font-mono">${code}</span> ${nm} ${id&&id.type?typeBadge(id.type):''} ${styleBadge(s.style)}
-      <span style="margin-left:12px">得分: <strong>${s.score}</strong></span>
-      ${s.gated?'<span class="badge badge-amber">闭合往返不足 '+STYLE_CFG.minClosed+' 笔，封顶混合型</span>':''}
-      ${edge&&!s.gated?'<span class="badge badge-amber">边界账户（阈值±5 缓冲区），建议人工复核</span>':''}
-    </div>
-    <div class="detail-row" style="flex-wrap:wrap;gap:16px;margin-top:8px">
-      <span>月均换手率: <strong>${fmt(s.raw.turnover)}</strong></span>
-      <span>平均持有: <strong>${fmt(s.raw.avgHold,' 天')}</strong></span>
-      <span>期初留存率: <strong>${fmt(s.raw.retention,'%')}</strong></span>
-      <span>交易天数占比: <strong>${fmt(s.raw.days,'%')}</strong></span>
-      <span>买卖双向率: <strong>${fmt(s.raw.both,'%')}</strong></span>
-      <span>月均笔数: <strong>${fmt(s.raw.count)}</strong></span>
-      <span>闭合往返: <strong>${s.raw.closed} 笔</strong></span>
-    </div>
-    <div style="margin-top:10px"><a href="javascript:void(0)" onclick="document.querySelector('[data-tab=\\'behavior\\']')&&switchTab('behavior');showAccountProfile('${code}')" style="font-size:13px;color:#1d4ed8">查看完整画像 →</a></div>
-  </div>`;
 }
 
 function bondSectionsHtml(acct){
@@ -5097,6 +5067,233 @@ function compareAccounts(){
   if(codeB)initProfileCharts(buildAccountProfileHtml.lastSid,codeB);
 }
 
+// MANAGER_REVIEW_BEGIN
+// Local, evidence-based operating review. No saved data and no remote services.
+const ManagerReview=(()=>{
+  const EPS=1e-10,DAY=86400000;
+  const RULES=Object.freeze({windows:[5,10,20],lookback:60,minQuotes:10,low:.25,high:.75,minCoverage:.8,minNetGross:.15,minEventScale:.03,minPeerScale:.01,peerCount:3,peerShare:2/3});
+  const label=k=>IndexReplay.CATEGORIES.find(c=>c.key===k)?.label||'未归类';
+  const pct=(v,n=0)=>(v*100).toFixed(n)+'%',sharePct=v=>v>0&&v<.001?'不足0.1%':pct(v,1),money=v=>Number(v).toLocaleString('zh-CN',{maximumFractionDigits:3});
+  const md=d=>d?Number(d.slice(5,7))+'月'+Number(d.slice(8,10))+'日':'';
+  const period=(a,b)=>a===b?md(a):md(a)+'—'+md(b);
+  const sign=v=>v>EPS?1:v<-EPS?-1:0;
+  const basis=e=>e.kind==='bond'?e.faceAmount:e.amount;
+  const asDay=d=>new Date(d).toISOString().slice(0,10);
+  const plusDays=(d,n)=>asDay(Date.parse(d+'T00:00:00Z')+n*DAY);
+  function plusMonth(d){const x=new Date(d+'T00:00:00Z'),day=x.getUTCDate();x.setUTCDate(1);x.setUTCMonth(x.getUTCMonth()+1);const last=new Date(Date.UTC(x.getUTCFullYear(),x.getUTCMonth()+1,0)).getUTCDate();x.setUTCDate(Math.min(day,last));return asDay(x);}
+  function quoteAt(qs,date){let l=0,h=qs.length;while(l<h){const m=(l+h)>>1;if(qs[m][0]<=date)l=m+1;else h=m;}const q=qs[l-1];return q&&Date.parse(date+'T00:00:00Z')-Date.parse(q[0]+'T00:00:00Z')<=10*DAY?{date:q[0],price:q[1],index:l-1}:null;}
+  function forward(qs,date,target){const b=quoteAt(qs,date);if(!b)return null;const end=qs.at(-1)?.[0];if(!end||end<=date)return null;const cutoff=target<=end?target:end,q=quoteAt(qs,cutoff);return q&&q.date>b.date?{target,date:q.date,baseDate:b.date,value:q.price/b.price-1,complete:target<=end}:null;}
+  function marketFeatures(quotes){
+    const qs=quotes.filter(q=>q[1]>0).slice().sort((a,b)=>a[0].localeCompare(b[0])),ranks=new Map();
+    for(let i=0;i<qs.length;i++){const from=Math.max(0,i-RULES.lookback+1);if(i-from+1<RULES.minQuotes)continue;let min=Infinity,max=-Infinity;for(let j=from;j<=i;j++){min=Math.min(min,qs[j][1]);max=Math.max(max,qs[j][1]);}if(max-min>Math.abs(qs[i][1])*1e-9)ranks.set(qs[i][0],{rank:(qs[i][1]-min)/(max-min),first:qs[from][0],count:i-from+1});}
+    return{quotes:qs,ranks};
+  }
+  function meanScale(accounts,start,end){
+    let sum=0,missing=0;
+    for(const {account:a,weight:w}of accounts){const values=a.positions.filter(p=>p.date>=start&&p.date<=end);const previous=IndexReplay.scaleAt(a,start);if(previous&&!values.some(p=>p.date===previous.date))values.unshift(previous);if(!values.length){missing++;continue;}sum+=values.reduce((n,p)=>n+p.size,0)/values.length*w;}
+    return{value:missing?null:sum,missing};
+  }
+  function aggregate(events){
+    const out={amount:0,buy:0,sell:0,net:0,bondNet:0,fundNet:0,gross:0,missing:0,days:new Set(),buyDays:new Set(),sellDays:new Set(),events:[]};
+    for(const e of events){if(!['buy','sell'].includes(e.action))continue;out.amount+=e.amount;out[e.action]+=e.amount;out.days.add(e.date);out[e.action+'Days'].add(e.date);out.events.push(e);const b=basis(e);if(b==null){out.missing++;continue;}out.gross+=b;const n=(e.action==='buy'?1:-1)*b;out.net+=n;out[e.kind==='bond'?'bondNet':'fundNet']+=n;}
+    out.direction=out.missing?0:sign(out.net);return out;
+  }
+  const weighted=(a,w)=>[...a.events,...a.unknown.filter(e=>e.recordKind==='flow')].filter(e=>['buy','sell'].includes(e.action)).map(e=>({...e,amount:e.amount*w,faceAmount:e.faceAmount==null?null:e.faceAmount*w,weight:w}));
+  function accountProfile(a,w,total,calendarLength){
+    const events=weighted(a,w),t=aggregate(events),cats=new Map();for(const e of events){if(!cats.has(e.bucket))cats.set(e.bucket,[]);cats.get(e.bucket).push(e);}
+    const categories=[...cats].map(([key,es])=>({key,...aggregate(es)})).sort((a,b)=>b.amount-a.amount);
+    const hs=Object.entries(a.actual).filter(([,n])=>n>EPS).sort((a,b)=>b[1]-a[1]);
+    const modes=categories.filter(c=>c.amount>=t.amount*.1).slice(0,3).map(c=>{
+      const n=label(c.key),small=Math.min(c.buy,c.sell)/Math.max(c.buy,c.sell,EPS),held=(a.actual[c.key]||0)>EPS;
+      if(small<.15)return n+(c.buy>c.sell?(held?'以买入配置为主，卖出较少':'以买入为主'):'以减持为主');
+      const frequent=c.days.size>=10&&c.days.size/Math.max(1,calendarLength)>=.4;
+      return n+(frequent?'双向交易较频繁':c.days.size<=3?'以少数交易日的买卖为主':'持续开展双向交易');
+    });
+    const top=categories.slice(0,2),coverage=top.reduce((n,c)=>n+c.amount,0)/Math.max(t.amount,EPS);
+    const focus=top.map(c=>label(c.key)).join('和');
+    const holding=hs.length?'期末持仓以'+label(hs[0][0])+'为主'+(hs[1]&&hs[1][1]/hs.reduce((n,h)=>n+h[1],0)>=.1?'，同时持有'+label(hs[1][0]):'')+'。':'';
+    const text=t.amount>0?`${a.name}占本期交易额的${sharePct(t.amount/total)}，${focus?'以'+focus+'交易为主'+(coverage<.8?'，另有其他品类操作':'')+'；':''}${modes.join('，')}。${holding}`:`${a.name}本期没有纳入复盘的债券、基金买卖。${holding}`;
+    return{code:a.code,name:a.name,weight:w,share:total?t.amount/total:0,...t,categories,text,startDate:a.startDate};
+  }
+  function netText(e){
+    const part=(v,unit)=>`净${v>=0?'买入':'卖出'}${money(Math.abs(v))}亿元${unit}`;
+    const ps=[];if(Math.abs(e.bondNet)>EPS)ps.push(part(e.bondNet,'面额'));if(Math.abs(e.fundNet)>EPS)ps.push(part(e.fundNet,'基金金额'));return ps.join('、')||'买卖大致平衡';
+  }
+  function focusShifts(idx,accounts,total){
+    const events=accounts.flatMap(x=>x.events),months=[...new Set(events.map(e=>e.date.slice(0,7)))].sort(),out=[];
+    for(const month of months.slice(1)){const date=month+'-01',before=aggregate(events.filter(e=>e.date<date)),after=aggregate(events.filter(e=>e.date>=date));if(before.amount<total*.1||after.amount<total*.1||after.days.size<5)continue;
+      const ranked=side=>accounts.map(a=>({account:a,amount:a.events.filter(e=>side?e.date>=date:e.date<date).reduce((n,e)=>n+e.amount,0)})).sort((a,b)=>b.amount-a.amount),old=ranked(false)[0],next=ranked(true)[0];
+      if(!old||!next||old.account.code===next.account.code)continue;
+      const beforeNext=next.account.events.filter(e=>e.date<date).reduce((n,e)=>n+e.amount,0)/before.amount,afterOld=old.account.events.filter(e=>e.date>=date).reduce((n,e)=>n+e.amount,0)/after.amount,share=next.amount/after.amount;
+      if(share<.35||share-beforeNext<.2||old.amount/before.amount-afterOld<.2)continue;
+      const sd=BondMarket.day(next.account.startDate),isNew=!!sd&&sd>=date&&sd<=idx.end;
+      out.push({date,old:old.account.code,next:next.account.code,share,score:share-beforeNext,amount:next.amount,text:`${Number(month.slice(5))}月起，交易重心由${old.account.name}转向${isNew?'新开的':''}${next.account.name}，后者贡献此后${pct(share,1)}的交易额（${money(next.amount)}亿元），主要围绕${next.account.categories.slice(0,2).map(c=>label(c.key)).join('和')}操作。`});
+    }
+    return out.sort((a,b)=>b.score-a.score).slice(0,2).sort((a,b)=>a.date.localeCompare(b.date));
+  }
+  function build(idx){
+    const features=new Map(IndexReplay.CATEGORIES.map(c=>[c.key,marketFeatures(idx.market.series.get(c.key)?.quotes||[])]));
+    const calendar=[...new Set([...[...features.values()].flatMap(f=>f.quotes.map(q=>q[0])),...[...idx.accounts.values()].flatMap(a=>[...a.events,...a.unknown.filter(e=>e.recordKind==='flow')].map(e=>e.date))])].filter(d=>d>idx.start&&d<=idx.end).sort();
+    const managers=new Map();for(const m of idx.managers){const selected=IndexReplay.selections(idx,{level:'manager',dept:'all',manager:m.key}),events=selected.flatMap(x=>weighted(x.account,x.weight)).sort((a,b)=>a.date.localeCompare(b.date));managers.set(m.key,{...m,selected,events,total:aggregate(events),peerPrefixes:new Map()});}
+    return{idx,features,calendar,managers,cache:new Map()};
+  }
+  function prefix(model,m,bucket){
+    if(m.peerPrefixes.has(bucket))return m.peerPrefixes.get(bucket);
+    const rows=model.calendar.map(date=>({date,net:0,gross:0,amount:0,missing:0})),map=new Map(rows.map(r=>[r.date,r]));
+    for(const e of m.events){if(e.bucket!==bucket)continue;const r=map.get(e.date);if(!r)continue;r.amount+=e.amount;const b=basis(e);if(b==null)r.missing++;else{r.net+=(e.action==='buy'?1:-1)*b;r.gross+=b;}}
+    const sums=[{net:0,gross:0,amount:0,missing:0}];for(const r of rows){const p=sums.at(-1);sums.push({net:p.net+r.net,gross:p.gross+r.gross,amount:p.amount+r.amount,missing:p.missing+r.missing});}
+    m.peerPrefixes.set(bucket,sums);return sums;
+  }
+  function peers(model,m,bucket,from,to){
+    const rows=[];for(const other of model.managers.values()){if(other.dept!==m.dept)continue;const ps=prefix(model,other,bucket),a=ps[from],b=ps[to+1],gross=b.gross-a.gross,net=b.net-a.net,amount=b.amount-a.amount,missing=b.missing-a.missing;if(!(amount>EPS))continue;
+      const size=meanScale(other.selected,model.calendar[from],model.calendar[to]).value;
+      const direction=!missing&&gross>EPS&&Math.abs(net)/gross>=RULES.minNetGross&&(size==null||Math.abs(net)/size>=RULES.minPeerScale)?sign(net):0;
+      rows.push({key:other.key,name:other.name,net,gross,amount,direction,size,missing});
+    }
+    const buy=rows.filter(r=>r.direction>0).length,sell=rows.filter(r=>r.direction<0).length,majority=buy>=Math.ceil(rows.length*RULES.peerShare)?1:sell>=Math.ceil(rows.length*RULES.peerShare)?-1:0,current=rows.find(r=>r.key===m.key),divergent=rows.length>=RULES.peerCount&&majority!==0&&current?.direction===-majority;
+    return{rows,buy,sell,majority,divergent,aligned:Math.max(buy,sell)};
+  }
+  function scan(model,m,profile=null){
+    const {calendar,idx}=model,events=profile?profile.events:m.events,selected=profile?m.selected.filter(x=>x.account.code===profile.code):m.selected,out=[];
+    for(const cat of IndexReplay.CATEGORIES){const es=events.filter(e=>e.bucket===cat.key);if(!es.length)continue;const feature=model.features.get(cat.key),rows=calendar.map(date=>({date,events:[]})),map=new Map(rows.map((r,i)=>[r.date,{r,i}]));for(const e of es)map.get(e.date)?.r.events.push(e);
+      const ends=[...new Set(es.map(e=>map.get(e.date)?.i).filter(i=>i!=null))];
+      for(const end of ends)for(const width of RULES.windows){const start=Math.max(0,end-width+1),window=rows.slice(start,end+1),t=aggregate(window.flatMap(r=>r.events));if(!t.gross||t.missing||!t.direction||Math.abs(t.net)/t.gross<RULES.minNetGross)continue;
+        const first=t.events[0]?.date,last=t.events.at(-1)?.date;if(!first||!last)continue;
+        const actualFrom=map.get(first).i,actualTo=map.get(last).i,scale=meanScale(selected,first,last).value;
+        // A tiny / closing account denominator must not turn a routine sale into
+        // a dominant manager judgement. This screen affects prose only.
+        if(!(scale>0&&Math.abs(t.net)/scale>=RULES.minEventScale&&Math.abs(t.net)/scale<=3))continue;
+        const directed=window.map(r=>({...aggregate(r.events),date:r.date})).filter(r=>r.direction===t.direction),rankRows=directed.filter(r=>feature.ranks.has(r.date)),rankWeight=rankRows.reduce((n,r)=>n+Math.abs(r.net),0),allWeight=directed.reduce((n,r)=>n+Math.abs(r.net),0),coverage=allWeight?rankWeight/allWeight:0;
+        const rank=rankWeight?rankRows.reduce((n,r)=>n+feature.ranks.get(r.date).rank*Math.abs(r.net),0)/rankWeight:null;
+        const week=forward(feature.quotes,last,plusDays(last,7)),month=forward(feature.quotes,last,plusMonth(last)),outcome=month?.complete?month:week?.complete?week:null;
+        const swing=(cat.key==='convertible'||cat.key==='equityFund') ? .008 : .002;
+        const location=coverage>=RULES.minCoverage&&rank!=null?(rank<=RULES.low?'low':rank>=RULES.high?'high':'middle'):'unknown';
+        const good=!!outcome&&outcome.value*t.direction>=swing,bad=!!outcome&&outcome.value*t.direction<=-swing;
+        const favorable=good&&((t.direction>0&&location==='low')||(t.direction<0&&location==='high'));
+        const adverse=bad&&((t.direction>0&&location==='high')||(t.direction<0&&location==='low'));
+        const peer=profile?null:peers(model,m,cat.key,actualFrom,actualTo);
+        const positionOnly=(!profile||profile.isPrimary)&&directed.length>=3&&((t.direction>0&&location==='low')||(t.direction<0&&location==='high'));
+        if(!favorable&&!adverse&&!peer?.divergent&&!positionOnly)continue;
+        const byAccount=[...new Set(t.events.map(e=>e.account))].map(code=>({code,name:idx.accounts.get(code)?.name||code,...aggregate(t.events.filter(e=>e.account===code))})).sort((a,b)=>Math.abs(b.net)-Math.abs(a.net));
+        const score=Math.log1p(Math.abs(t.net)/scale)*2+(adverse?4:0)+(favorable?4:0)+(peer?.divergent?5:0)+(profile&&!profile.isPrimary ? .3 : 0)+(!profile ? .5 : 0);
+        out.push({bucket:cat.key,account:profile?.code||'',start:first,end:last,windowStart:first,windowEnd:last,from:actualFrom,to:actualTo,...t,scale,rank,coverage,location,week,month,peer,accounts:byAccount,repeated:directed.length>=3,quality:adverse?'adverse':favorable?'favorable':peer?.divergent?'divergence':'position',score,share:profile?.share??1});
+      }
+    }
+    return out;
+  }
+  function overlap(a,b){const left=Math.max(a.from,b.from),right=Math.min(a.to,b.to);return Math.max(0,right-left+1)/Math.max(1,Math.min(a.to-a.from+1,b.to-b.from+1));}
+  function eventText(e,profiles){
+    const n=label(e.bucket),account=e.account?profiles.find(p=>p.code===e.account):null,actors=e.accounts.slice(0,2).map(a=>a.name).join('、');
+    const position=e.location==='low'?'处于阶段相对低位':e.location==='high'?'处于阶段相对高位':'';
+    const direction=e.direction>0?'买入':'卖出',verb=e.repeated?(e.direction>0?'持续加仓':'逐步减持'):(e.direction>0?'集中买入':'集中减持');
+    let text=account?(account.isPrimary?`${period(e.start,e.end)}，${account.name}在`:`${account.name}虽然仅占经理本期交易额的${sharePct(account.share)}，但在${period(e.start,e.end)}`):`${period(e.start,e.end)}，${actors?'主要通过'+actors+'操作，':''}`;
+    text+=`${n}${position?'指数'+position+'时，':''}${verb}，${netText(e)}，相当于${account?'该账户':'经理名下账户合计'}区间日均净规模的${pct(Math.abs(e.net)/e.scale,1)}。`;
+    if(e.peer?.divergent)text+=`同一时段，同部门${e.peer.rows.length}名参与经理中有${e.peer.aligned}名${e.peer.majority>0?'净买入':'净卖出'}该品种，该经理方向相反。`;
+    const fmt=(x,title)=>x?`${title}${x.value>=0?'上涨':'下跌'}${pct(Math.abs(x.value),2)}${x.complete?'':`（截至${md(x.date)}，未满期）`}`:'';
+    const later=[fmt(e.week,'随后一周对应指数'),fmt(e.month,'一个月')].filter(Boolean);if(later.length)text+=later.join('、')+'。';
+    if(e.quality==='favorable')text+=e.direction>0?'买入后的市场走势有利，这段加仓节奏较好。':'减持后的市场走势回落，这段卖出时点较好。';
+    if(e.quality==='adverse')text+=e.direction>0?'买入后的市场表现转弱，这段加仓时点值得复盘。':'卖出后的市场继续走强，这段减持较早。';
+    return text;
+  }
+  function report(model,key){
+    if(model.cache.has(key))return model.cache.get(key);const m=model.managers.get(key);if(!m)return null;
+    const profiles=m.selected.map(x=>accountProfile(x.account,x.weight,m.total.amount,model.calendar.length)).sort((a,b)=>b.amount-a.amount),active=profiles.filter(a=>a.amount>EPS);
+    let sum=0;const primary=active.filter((a,i)=>{const use=i<2||(sum<.8&&i<5);if(use)sum+=a.share;return use;});
+    const mainCodes=new Set(primary.map(p=>p.code)),candidates=scan(model,m);
+    for(const p of active){p.isPrimary=mainCodes.has(p.code);candidates.push(...scan(model,m,p));}
+    const chosen=[];for(const e of candidates.sort((a,b)=>b.score-a.score)){
+      const same=chosen.find(x=>x.bucket===e.bucket&&x.direction===e.direction&&overlap(x,e)>.35&&(!x.account||!e.account||x.account===e.account));
+      if(same){if(!same.peer?.divergent&&e.peer?.divergent){const p=peers(model,m,same.bucket,same.from,same.to);if(p.divergent&&p.rows.find(r=>r.key===m.key)?.direction===same.direction)same.peer=p;}continue;}
+      chosen.push(e);
+    }
+    chosen.sort((a,b)=>a.start.localeCompare(b.start)||b.score-a.score);chosen.forEach((e,i)=>{e.id='event-'+i;e.text=eventText(e,profiles);});
+    const shifts=focusShifts(model.idx,profiles,m.total.amount),categoryTotals=new Map();for(const e of m.events)categoryTotals.set(e.bucket,(categoryTotals.get(e.bucket)||0)+e.amount);
+    const topCats=[...categoryTotals].sort((a,b)=>b[1]-a[1]);
+    const out={key,name:m.name,dept:m.dept,start:model.idx.start,end:model.idx.end,accountCount:profiles.length,activeCount:active.length,amount:m.total.amount,profiles,primary,shifts,events:chosen,total:m.total,
+      introduction:`本期覆盖${profiles.length}个名下账户，其中${active.length}个有债券或基金买卖，分摊后交易额${money(m.total.amount)}亿元${topCats.length?'；主要交易'+topCats.slice(0,3).map(([k,n])=>label(k)+'（'+pct(n/m.total.amount,1)+'）').join('、'):''}。`,
+      coverage:{quotedCategories:[...model.features].filter(([,f])=>f.quotes.length).length,missingFace:m.total.missing}};
+    if(model.cache.size>=20)model.cache.delete(model.cache.keys().next().value);model.cache.set(key,out);return out;
+  }
+  return{RULES,build,report,aggregate,marketFeatures,quoteAt,forward,plusMonth,meanScale,peers,netText,label,period,md,pct,money,overlap};
+})();
+// MANAGER_REVIEW_END
+
+// MANAGER_REVIEW_UI_BEGIN
+const managerReviewModels=new WeakMap();let managerReviewCurrent=null;
+function renderManagerReview(){
+  const el=document.getElementById('irManagerReview'),ctx=indexReplayContext;if(!el||!ctx)return;
+  el.hidden=indexReplayState.level!=='manager';if(el.hidden)return;
+  let model=managerReviewModels.get(ctx.idx);if(!model){model=ManagerReview.build(ctx.idx);managerReviewModels.set(ctx.idx,model);}
+  const report=ManagerReview.report(model,indexReplayState.manager);managerReviewCurrent={model,report,event:null,page:1};
+  if(!report){el.innerHTML='<div class="empty-state">请上传IAM信息并选择投资经理。</div>';return;}
+  const esc=irEscape,accountLine=p=>`<p class="mv-paragraph">${esc(p.text)} <button type="button" class="ir-link" data-mv-account="${esc(p.code)}">查看账户</button></p>`;
+  const eventLine=e=>`<article class="mv-event"><p>${esc(e.text)}</p><button type="button" class="ir-link" data-mv-event="${esc(e.id)}">查看指标与流水依据</button></article>`;
+  const available=report.events.slice().sort((a,b)=>b.score-a.score),picked=new Set(),take=(predicate,n)=>{for(const e of available.filter(predicate).slice(0,n))picked.add(e);};
+  take(e=>e.peer?.divergent,2);take(e=>!e.account||report.primary.some(p=>p.code===e.account),3);take(e=>e.account&&!report.primary.some(p=>p.code===e.account),2);
+  for(const e of available){if(picked.size>=8)break;picked.add(e);}const featured=[...picked].sort((a,b)=>a.start.localeCompare(b.start)),rest=report.events.filter(e=>!picked.has(e));
+  el.innerHTML=`<div class="mv-heading"><strong>${esc(report.name)} · 投资经理操作分析</strong><small>${esc(report.start)}—${esc(report.end)}</small></div><p class="mr-context">经理全账户总结；下方“经理名下账户”筛选仅影响复盘图和明细。</p><p class="mv-intro">${esc(report.introduction)}</p>
+    ${report.primary.length?'<h4>主要操作账户</h4>'+report.primary.map(accountLine).join(''):''}
+    ${report.shifts.length?'<h4>操作重心变化</h4>'+report.shifts.map(s=>`<p class="mv-paragraph">${esc(s.text)} <button type="button" class="ir-link" data-mv-account="${esc(s.next)}">查看承接账户</button></p>`).join(''):''}
+    <h4>市场中的操作与同部门比较</h4>${featured.length?featured.map(eventLine).join(''):`<p class="mr-context">${report.coverage.quotedCategories?'当前材料中未检出达到展示门槛的市场操作事件或同部门明显分歧。':'尚未提供六类指数行情，可在第五卡槽补充后查看市场时点分析。'}</p>`}
+    ${rest.length?`<details class="mv-more"><summary>继续查看其他操作（${rest.length}段）</summary>${rest.map(eventLine).join('')}</details>`:''}
+    <details id="mvEvidence" class="mr-details" hidden><summary>操作依据</summary><div id="mvEvidenceBody"></div></details>
+    <details class="mr-method"><summary>经理分析口径</summary><p>仅使用本机上传资料。账户范围、六类映射、清洗和1/N分摊沿用本页复盘口径；交易额占比按有效债券、基金买卖金额（含一级分销，排除回购、期货和回售）；有效但未归类的成交仍进入交易份额，不作指数时点评价。主要操作账户按交易额排序，优先列出前两户，尽量覆盖80%的交易额，最多展示5户；其余显著账户操作仍参与事件分析。账户特点结合买卖方向与期末实际持仓。重心变化比较转移前后账户的交易额份额，新开户须有起始运作日期支持。分析扫描5、10、20个行情或交易日期的操作区间，合并重叠事件；主要账户及小账户均参与扫描，默认展示8段显著事件，其余可展开。净变化沿用债券面额与基金金额，缺面额不推断方向；操作达到区间日均净规模3%，且净变化不低于双向交易量15%才进入事件筛选；净操作量超过区间日均净规模3倍时不作文字时点评价，避免关户、小分母等扰动，但不改变任何原有统计。区间日均规模取区间内有效报送规模的简单平均，并纳入区间起点最近一次有效报送；无规模不作强弱判断。相对高低位取操作当日及此前最多60个有效行情日的区间位置，至少10个行情值，低位不高于25%、高位不低于75%，价格覆盖不足80%不定性；“持续”要求至少3个净同向操作日。同部门至少3名经理实际参与，至少2/3净同向才描述反向操作；双向接近平衡、净变化低于规模1%和缺面额者计入参与人数但不作为同向票。指数一周为7个自然日，一个月为对应日历日期；取目标日及此前最近有效值，超过10天不沿用，未满期注明实际截止日。完整月观察优先于完整周观察；转债/股票指数变化达到0.8%、其余0.2%才写明显后续方向，避免微小波动触发评语。买在相对高位、随后明显下跌，或卖在相对低位、随后明显上涨时才写不利时点；卖出后财富指数缓慢上涨不直接写为卖早。相对低位持续买入、相对高位逐步减持，也可直接描述操作节奏，未形成完整后续观察时不强作优劣判断。这里评价市场时点，指数变化不当作账户收益。其他基金只用新综合财富作宽口径参照。</p></details>`;
+  if(!el._mvBound){el._mvBound=true;el.addEventListener('click',event=>{const b=event.target.closest('button');if(!b)return;if(b.dataset.mvAccount){showManagerReviewChart({account:b.dataset.mvAccount,bucket:reportForCurrentManager().profiles.find(p=>p.code===b.dataset.mvAccount)?.categories[0]?.key});}else if(b.dataset.mvEvent){managerReviewCurrent.event=reportForCurrentManager().events.find(e=>e.id===b.dataset.mvEvent);managerReviewCurrent.page=1;renderManagerReviewEvidence();}else if(b.dataset.mvAction==='chart')showManagerReviewChart(managerReviewCurrent.event);else if(b.dataset.mvAction==='page'){managerReviewCurrent.page=Number(b.dataset.page);renderManagerReviewEvidence();}});}
+}
+function reportForCurrentManager(){return managerReviewCurrent?.report;}
+function showManagerReviewChart(e){
+  if(!e||!indexReplayContext)return;const s=indexReplayState;s.managerAccount=e.account||'';if(e.bucket)s.category=e.bucket;s.view='index';renderIndexReplay();
+  if(e.start&&e.end){const chart=echarts.getInstanceByDom(document.getElementById('irChart'));chart?.dispatchAction({type:'dataZoom',startValue:Date.parse(e.start+'T00:00:00Z'),endValue:Date.parse(ManagerReview.plusMonth(e.end)+'T00:00:00Z')});}
+  document.getElementById('irChartTitle')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function renderManagerReviewEvidence(){
+  const cur=managerReviewCurrent,e=cur?.event,root=document.getElementById('mvEvidence');if(!root||!e)return;root.hidden=false;root.open=true;
+  const esc=irEscape,money=irMoney,percent=irPct,report=cur.report,range=ManagerReview.period(e.start,e.end),f=cur.model.features.get(e.bucket),rankRows=e.events.filter(r=>f.ranks.has(r.date));
+  const observations=[['一周',e.week],['一个月',e.month]].map(([n,o])=>`<tr><td>${n}</td><td>${o?esc(o.baseDate):'—'}</td><td>${o?esc(o.target):'—'}</td><td>${o?esc(o.date):'—'}</td><td>${o?percent(o.value):'缺行情'}</td><td>${o?(o.complete?'完整':'未满期'):'未计算'}</td></tr>`).join('');
+  const peers=e.peer?.rows||[],p=Math.max(1,Math.min(cur.page,Math.max(1,Math.ceil(e.events.length/20))));cur.page=p;
+  root.querySelector('summary').textContent=`操作依据：${range} · ${ManagerReview.label(e.bucket)}`;
+  root.querySelector('#mvEvidenceBody').innerHTML=`<p class="mr-context">当前经理${esc(report.name)}；共管金额已按1/N分摊。${esc(e.account?cur.model.idx.accounts.get(e.account)?.name:'经理名下账户合计')} · ${esc(range)}</p>
+    <div class="mv-facts"><span>买入金额 <b>${money(e.buy)}亿元</b></span><span>卖出金额 <b>${money(e.sell)}亿元</b></span><span>债券净买卖 <b>${money(e.bondNet)}亿元面额</b></span><span>基金净买卖 <b>${money(e.fundNet)}亿元</b></span><span>区间日均净规模 <b>${money(e.scale)}亿元</b></span><span>操作占比 <b>${percent(Math.abs(e.net)/e.scale)}</b></span></div>
+    <p class="mr-context">操作日指数区间相对位置：${e.rank==null?'缺行情':percent(e.rank)}；方向操作的行情覆盖：${percent(e.coverage)}。参考为每个操作日及此前最多60个行情日的高低区间，阶段位置按净操作量加权。${rankRows.length?'对应指数：'+esc(IndexReplay.CATEGORIES.find(c=>c.key===e.bucket)?.name):''}</p>
+    <button type="button" class="ir-link" data-mv-action="chart">在复盘图中查看这段操作</button>
+    <div class="table-container"><table><thead><tr><th>后续市场</th><th>起点取价日</th><th>目标日</th><th>实际取价日</th><th>指数变化</th><th>观察状态</th></tr></thead><tbody>${observations}</tbody></table></div>
+    ${peers.length?`<div class="section-title">同部门同区间、同品类操作</div><div class="table-container"><table><thead><tr><th>经理</th><th>交易金额（亿元）</th><th>净变化（亿元面额/基金金额）</th><th>方向</th></tr></thead><tbody>${peers.map(p=>`<tr><td>${esc(p.name)}</td><td>${money(p.amount)}</td><td>${money(p.net)}</td><td>${p.direction>0?'净买入':p.direction<0?'净卖出':'平衡 / 未达方向门槛'}</td></tr>`).join('')}</tbody></table></div>`:''}
+    <div class="section-title">对应流水（${e.events.length}笔）</div><div class="table-container"><table><thead><tr><th>日期</th><th>账户</th><th>品种 / 方向</th><th>证券名称 / 代码</th><th>金额（亿元）</th><th>债券面额（亿元）</th><th>来源</th></tr></thead><tbody>${e.events.slice((p-1)*20,p*20).map(r=>{const a=cur.model.idx.accounts.get(r.account),src=r.source;return`<tr><td>${esc(r.date)}</td><td>${esc(a?.name||r.account)}<small>${esc(r.account)}</small></td><td>${esc(r.variety)} · ${esc(r.direction)}</td><td>${esc(r.name)}<small>${esc(r.code)} · ${esc(r.market)}</small></td><td>${money(r.amount)}</td><td>${r.kind==='bond'?money(r.faceAmount):'—'}</td><td>${esc(src?`${src.file||''} / ${src.sheet||''} / 第${src.row||'?'}行`:'未提供来源行号')}<small>${esc(r.tradeId)}</small></td></tr>`;}).join('')}</tbody></table></div>
+    <div class="pager"><span>每页20笔 · 第${p}/${Math.max(1,Math.ceil(e.events.length/20))}页</span><div class="pager-btns"><button type="button" data-mv-action="page" data-page="${p-1}"${p<=1?' disabled':''}>上一页</button><button type="button" data-mv-action="page" data-page="${p+1}"${p*20>=e.events.length?' disabled':''}>下一页</button></div></div>`;
+}
+// MANAGER_REVIEW_UI_END
+
+// BUSINESS_VIEWS_BEGIN
+const BusinessViews=(()=>{
+  const TYPES=['协议回购','质押式回购','通用质押式回购'],DIRS=['正回购','逆回购'];
+  const typeOf=s=>String(s).includes('协议')?TYPES[0]:String(s).includes('通用质押式')?TYPES[2]:TYPES[1];
+  function repoDaily(rows){
+    const accounts=new Map(),dates=new Set();for(const r of rows){const code=String(r._code||'').trim(),date=BondMarket.day(r._dateStr||r._date||r['交易日期']),dir=DIRS.find(d=>String(r._dir||'').startsWith(d)),amount=Number(r._amountYi);if(!code||!date||!dir||!Number.isFinite(amount))continue;
+      dates.add(date);if(!accounts.has(code))accounts.set(code,{code,name:r._name||code,days:new Map(),amount:0});const a=accounts.get(code);if(!a.days.has(date))a.days.set(date,Object.fromEntries(DIRS.flatMap(d=>TYPES.map(t=>[d+'|'+t,0]))));a.days.get(date)[dir+'|'+typeOf(r._biz)]+=amount;a.amount+=amount;
+    }
+    return{accounts,dates:[...dates].sort()};
+  }
+  function sortRows(rows,col,asc){return rows.slice().sort((a,b)=>{const x=a.values[col],y=b.values[col],empty=v=>v==null||typeof v==='number'&&!Number.isFinite(v);if(empty(x)&&empty(y))return 0;if(empty(x))return 1;if(empty(y))return-1;const n=typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y),'zh-CN');return(asc?n:-n)||String(a.values[0]).localeCompare(String(b.values[0]),'zh-CN');});}
+  return{TYPES,DIRS,typeOf,repoDaily,sortRows};
+})();
+let repoDailyContext=null;const repoDailyState={account:''};
+function renderRepoDailySection(){return`<div class="card" id="repoDailySection"><div class="card-header"><div class="card-title">账户每日回购量</div></div><div class="card-body"><div class="ir-controls"><label>查询账户<input id="repoDailyAccount" list="repoDailyAccounts" placeholder="输入账户名称或项目编号" autocomplete="off"><datalist id="repoDailyAccounts"></datalist></label></div><p id="repoDailyNote" class="mr-context" role="status"></p><div id="chart-repo-account-daily" class="chart" style="height:400px"></div><p class="mr-context">每日两组柱分别展示正回购、逆回购，组内按三种业务堆叠；金额取当日有效交易金额，不计算日均，不轧差。</p></div></div>`;}
+function initRepoDaily(result){
+  const root=document.getElementById('repoDailySection');if(!root)return;const model=BusinessViews.repoDaily(result._store?.hg||[]);repoDailyContext={root,model};const accounts=[...model.accounts.values()].sort((a,b)=>b.amount-a.amount||a.name.localeCompare(b.name,'zh-CN'));
+  if(!model.accounts.has(repoDailyState.account))repoDailyState.account=accounts[0]?.code||'';
+  root.querySelector('#repoDailyAccounts').innerHTML=accounts.map(a=>`<option value="${irEscape(a.name+' ['+a.code+']')}"></option>`).join('');
+  root.querySelector('#repoDailyAccount').value=accounts.find(a=>a.code===repoDailyState.account)?accounts.find(a=>a.code===repoDailyState.account).name+' ['+repoDailyState.account+']':'';
+  root.querySelector('#repoDailyAccount').addEventListener('change',event=>{const q=event.target.value.trim(),matches=accounts.filter(a=>a.code===q||a.name===q||a.name+' ['+a.code+']'===q);if(matches.length!==1){root.querySelector('#repoDailyNote').textContent='请选择一个匹配账户。';event.target.setAttribute('aria-invalid','true');return;}event.target.removeAttribute('aria-invalid');repoDailyState.account=matches[0].code;drawRepoDaily();});drawRepoDaily();
+}
+function drawRepoDaily(){
+  const ctx=repoDailyContext;if(!ctx)return;const {root,model}=ctx,a=model.accounts.get(repoDailyState.account),el=root.querySelector('#chart-repo-account-daily');
+  const old=echarts.getInstanceByDom(el);if(old)disposeChartElement(el,old);if(!a){el.hidden=true;root.querySelector('#repoDailyNote').textContent='当前没有有效回购记录。';return;}el.hidden=false;root.querySelector('#repoDailyNote').textContent=`${a.name} · ${a.code} · 区间回购成交总额 ${irMoney(a.amount)}亿元`;
+  const chart=initChart(el),colors=['#2563eb','#10b981','#d97706'];chartInstances['repoAccountDaily']=chart;
+  chart.setOption({animation:false,legend:{top:8,type:'scroll',data:BusinessViews.DIRS.flatMap(d=>BusinessViews.TYPES.map(t=>d+' · '+t))},grid:{left:66,right:26,top:78,bottom:76},tooltip:{trigger:'axis',confine:true,axisPointer:{type:'shadow'},formatter:ps=>{const date=ps[0]?.axisValue;if(!date)return'';let html=irEscape(date);for(const dir of BusinessViews.DIRS){const group=ps.filter(p=>p.seriesName.startsWith(dir)),total=group.reduce((n,p)=>n+(Number(p.value)||0),0);html+=`<br><b>${dir} ${irMoney(total)}亿元</b>`;for(const p of group)html+=`<br>${p.marker}${irEscape(p.seriesName.split(' · ')[1])}：${irMoney(Number(p.value)||0)}`;}return html;}},xAxis:{type:'category',data:model.dates,axisLabel:{hideOverlap:true}},yAxis:{type:'value',name:'每日成交额（亿元）',min:0},dataZoom:[{type:'inside'},{type:'slider',bottom:12,height:20}],series:BusinessViews.DIRS.flatMap((dir,i)=>BusinessViews.TYPES.map((type,j)=>({name:dir+' · '+type,type:'bar',stack:dir,barMaxWidth:22,itemStyle:{color:colors[j],opacity:i?.52:1,borderColor:colors[j],borderWidth:i?1:0},data:model.dates.map(d=>a.days.get(d)?.[dir+'|'+type]||0)})))});
+}
+function onMgrCompareSort(col){const sc=managerState.compareSort;if(sc.col===col)sc.asc=!sc.asc;else{sc.col=col;sc.asc=col===0;}refreshManagerPanel();}
+// BUSINESS_VIEWS_END
+
 // INDEX_REPLAY_UI_BEGIN
 const indexReplayState={level:'department',dept:'投资顾问部',manager:'',account:'',managerAccount:'',category:'rateShort',view:'index',checkPage:1,recordPage:1,recordDate:'',recordKind:'flows'};
 const indexReplayModels=new WeakMap();let indexReplayContext=null;
@@ -5111,6 +5308,7 @@ function renderBondSummary(){const ctx=indexReplayContext,b=ctx.scope.bondSummar
 
 function renderIndexReplaySection(){return `<div class="card" id="indexReplay" data-release="${IndexReplay.VERSION}"><div class="card-header"><div class="card-title">指数与交易复盘</div></div><div class="card-body">
   <div class="ir-controls"><label>观察层级<select id="irLevel"><option value="department">部门</option><option value="manager">投资经理</option><option value="account">单个账户</option></select></label><label>部门<select id="irDepartment"></select></label><label id="irManagerControl" hidden>投资经理<select id="irManager"></select></label><label id="irAccountControl" hidden>账户<input id="irAccount" list="irAccounts" autocomplete="off" placeholder="输入名称或项目编号"><datalist id="irAccounts"></datalist></label></div>
+  <section id="irManagerReview" class="mv-review" aria-label="投资经理操作分析" hidden></section>
   <div id="irManagerAccountControl" class="ir-manager-account" hidden><label>经理名下账户<input id="irManagerAccount" list="irManagerAccounts" autocomplete="off" placeholder="全部名下账户，输入名称或项目编号"><datalist id="irManagerAccounts"></datalist></label></div>
   <div id="irMessage" class="mr-message" role="status" aria-live="polite"></div><div id="irContext" class="mr-context"></div>
   <div id="irViews" class="ir-views" hidden><button type="button" data-ir-view="index">指数复盘</button><button type="button" data-ir-view="security">个券复盘</button></div>
@@ -5157,12 +5355,12 @@ function renderIndexReplay(){
   const missing=ctx.scope.totals[s.category].missingBasis;
   root.querySelector('#irQuality').innerHTML=excluded.length||unverified.length||missing?`${holdings.length?`${holdings.length}条单纯负值基金持仓未计入对应截面；`:''}${flows.length?`${flows.length}笔交易按异常规则排除；`:''}${unverified.length?`${unverified.filter(r=>r.reasonCode==='verifiedLargeBond').length}笔大额债券经面额、全价及金额核对保留；${unverified.filter(r=>r.reasonCode==='missingTradeSize').length}笔基金成交缺规模待核验；`:''}${missing?`${missing}条记录缺债券面额，推算及仓位暂不计算；`:''}<button type="button" class="ir-link" data-ir-action="exceptions">查看本类筛选记录</button>`:'';
 
-  drawIndexReplayChart();renderIndexReplayChecks();renderIndexReplayRecords();applyIndexReplayMode();
+  renderManagerReview();drawIndexReplayChart();renderIndexReplayChecks();renderIndexReplayRecords();applyIndexReplayMode();
 }
 function applyIndexReplayMode(){
   const ctx=indexReplayContext;if(!ctx)return;const {root}=ctx,s=indexReplayState,security=s.view==='security';
   root.querySelector('#irViews').hidden=false;root.querySelector('#irIndexBody').hidden=security;for(const b of root.querySelectorAll('[data-ir-view]'))b.setAttribute('aria-pressed',b.dataset.irView===s.view?'true':'false');
-  const single=document.getElementById('indexSingleAccountReplay');if(single)single.hidden=!security;const legacy=document.getElementById('indexLegacyEval');if(legacy)legacy.hidden=s.level!=='account';
+  const single=document.getElementById('indexSingleAccountReplay');if(single)single.hidden=!security;
   if(security&&marketReplayContext?.result===ctx.result){marketReplayContext.scopeState={...s};marketReplayState.account=s.level==='account'?s.account:s.level==='manager'?s.managerAccount:'';marketReplayState.page=1;const a=marketReplayContext.idx.accounts.find(a=>a.code===s.account);marketReplayContext.root.querySelector('#marketReplayAccount').value=a?mrAccountLabel(a):s.account;renderMarketReplay();}
   requestAnimationFrame(resizeVisibleCharts);
 }
@@ -5428,57 +5626,15 @@ function exportMarketReplay(){
 
 function renderEvalTab(r){
   const nm=code=>profileState.nameMap&&profileState.nameMap.get(code)||code;
-  let html=renderIndexReplaySection()+'<div id="indexSingleAccountReplay" hidden>'+renderBondMarketSection()+'</div><details id="indexLegacyEval" class="ir-legacy" hidden><summary>原有全量账户评价：FIFO、持仓健康度与期末持仓</summary>';
+  let html=renderIndexReplaySection()+'<div id="indexSingleAccountReplay" hidden>'+renderBondMarketSection()+'</div>';
   // ① FIFO 往返评价（排名以闭合笔数为主）
-  if(r.fifo&&r.fifo.accounts.length>0){
+  if(r.fifo){
     html+=`<div class="card"><div class="card-header"><div class="card-title">FIFO 往返评价排行（按闭合笔数排名）</div></div><div class="card-body">
-      <p style="color:#64748b;font-size:13px;margin-bottom:12px">口径：期初持仓明细为期初开仓批（每百元全价成本），期内现券买入入队、卖出按 FIFO 配对；卖出全价 &gt; 成本全价 = 胜；闭合往返 &lt;3 笔的账户不参与；期末未平仓批次不计入；仅覆盖现券买卖（回购不做胜率）。排行以闭合笔数为主、胜率为辅</p>
+      <p style="color:#64748b;font-size:13px;margin-bottom:12px">全量账户排行，不随上方复盘范围筛选。口径：期初持仓明细为期初开仓批（每百元全价成本），期内现券买入入队、卖出按 FIFO 配对；卖出全价 &gt; 成本全价 = 胜；闭合往返 &lt;3 笔的账户不参与；期末未平仓批次不计入；仅覆盖现券买卖（回购不做胜率）。排行以闭合笔数为主、胜率为辅</p>
       ${renderTable(['排名','账户代码','账户名称','闭合往返','胜场','胜率','平均往返收益%','平均持有(天)'],r.fifo.accounts.slice(0,20).map((a,i)=>[i+1,`<span class="font-mono">${a.code}</span>`,nm(a.code),a.closed,a.wins,`${a.winRate.toFixed(1)}%`,a.avgRet,a.avgHold!=null?a.avgHold:'-']))}
     </div></div>`;
   }
-  // ② 持仓健康度（净值回撤 / 规模缩水 / 净值涨跌）
-  if(r.posHealth){
-    const ph=r.posHealth;
-    html+=`<div class="card"><div class="card-header"><div class="card-title">持仓健康度</div></div><div class="card-body">
-      <div class="grid-2">
-        <div><div class="section-title" style="margin-top:0">净值最大回撤 Top10</div>
-          ${ph.drawdowns.length>0?renderTable(['账户代码','账户名称','最大回撤','期初净值','期末净值'],ph.drawdowns.map(a=>[`<span class="font-mono">${a.code}</span>`,a.name,`${a.maxDD.toFixed(1)}%`,a.startNav,a.endNav]),{rowClass:row=>parseFloat(row[2])>5?'anomaly-row':''}):'<div class="empty-state">未发现明显回撤</div>'}
-        </div>
-        <div><div class="section-title" style="margin-top:0">规模持续缩水（期末较峰值下降 >50%，已剔除疑似关闭账户）</div>
-          ${ph.shrinks.length>0?renderPaginatedTable('posShrink',['账户代码','账户名称','峰值规模(亿)','期末规模(亿)','剩馀比例'],ph.shrinks.map(a=>[`<span class="font-mono">${a.code}</span>`,a.name,a.peak,a.last,`${a.ratio}%`]),{rowClass:()=>'anomaly-row',per:10}):'<div class="empty-state">未发现持续缩水账户</div>'}
-        </div>
-      </div>
-      <div class="section-title" style="margin-top:16px">净值涨跌排行（期末净值 ÷ 期初净值）</div>
-      <div class="grid-2">
-        <div><div class="section-title" style="margin-top:0">涨幅 Top10</div>
-          ${ph.gainers.length>0?renderTable(['账户代码','账户名称','涨幅','区间'],ph.gainers.map(a=>[`<span class="font-mono">${a.code}</span>`,a.name,`<span class="badge badge-green">+${a.change.toFixed(1)}%</span>`,`${a.first} ~ ${a.last}`])):'<div class="empty-state">暂无数据</div>'}
-        </div>
-        <div><div class="section-title" style="margin-top:0">跌幅 Top10</div>
-          ${ph.losers.length>0?renderTable(['账户代码','账户名称','跌幅','区间'],ph.losers.map(a=>[`<span class="font-mono">${a.code}</span>`,a.name,`<span class="badge badge-red">${a.change.toFixed(1)}%</span>`,`${a.first} ~ ${a.last}`]),{rowClass:()=>'anomaly-row'}):'<div class="empty-state">暂无数据</div>'}
-        </div>
-      </div>
-    </div></div>`;
-  }
-  // ③ 期末持仓横截面（结果状态）
-  const h=r.holdingsAnalysis;
-  if(h&&h.hasData){
-    const info=r.inputInfo||{};
-    html+=`<div class="section-title" style="margin-top:24px">期末持仓横截面</div>
-    <div class="card"><div class="card-header"><div class="card-title">持仓类别构成（市值占比） <span class="badge badge-gray">截面：${info.hdEndDate||info.hdEndLabel||'期末'}</span></div></div><div class="card-body"><div id="chart-hd-comp" class="chart"></div></div></div>
-  <div class="card"><div class="card-header"><div class="card-title">账户持仓概览（期末市值 Top20）</div></div><div class="card-body">${renderTable(['排名','账户代码','账户名称','市值(亿元)','面额(亿元)','浮动盈亏(亿元)','已实现盈亏(亿元)'],h.accounts.map((a,i)=>[i+1,`<span class="font-mono">${a.code}</span>`,a.name,a.mv,a.face,a.floatPnl,a.realPnl]),{rowClass:row=>row[5]<0?'anomaly-row':''})}</div></div>
-  <div class="grid-2">
-    <div class="card"><div class="card-header"><div class="card-title">浮动盈亏 · 浮盈 Top10</div></div><div class="card-body">${h.gainers.length>0?renderTable(['账户代码','账户名称','浮盈(亿元)'],h.gainers.map(a=>[`<span class="font-mono">${a.code}</span>`,a.name,a.pnl])):'<div class="empty-state">暂无数据</div>'}</div></div>
-    <div class="card"><div class="card-header"><div class="card-title">浮动盈亏 · 浮亏 Top10</div></div><div class="card-body">${h.losers.length>0?renderTable(['账户代码','账户名称','浮亏(亿元)'],h.losers.map(a=>[`<span class="font-mono">${a.code}</span>`,a.name,a.pnl]),{rowClass:()=>'anomaly-row'}):'<div class="empty-state">暂无数据</div>'}</div></div>
-  </div>`;
-    if(h.futures.length>0){
-      html+=`<div class="card"><div class="card-header"><div class="card-title">国债期货持仓（${h.futures.length} 条）</div></div><div class="card-body">${renderPaginatedTable('hdFutures',['账户代码','合约','多空','数量(手)','保证金(万元)','浮动盈亏(万元)'],h.futures.map(f=>[`<span class="font-mono">${f.acct}</span>`,f.contract,`<span class="badge ${f.dir==='空头'?'badge-red':'badge-green'}">${f.dir}</span>`,f.qty,f.margin,f.floatPnl]))}</div></div>`;
-    }
-    if(h.funds.length>0){
-      html+=`<div class="card"><div class="card-header"><div class="card-title">基金/REITs 持仓（市值 Top50）</div></div><div class="card-body">${renderTable(['账户代码','基金代码','基金名称','类型','市值(万元)','浮动盈亏(万元)'],h.funds.map(f=>[`<span class="font-mono">${f.acct}</span>`,`<span class="font-mono">${f.code}</span>`,f.name,f.kind,Math.round(f.mv*100)/100,Math.round(f.floatPnl*100)/100]),{rowClass:row=>row[5]<0?'anomaly-row':''})}</div></div>`;
-    }
-  }
-  html+='</details>';
-  return html||'<div class="empty-state">暂无评价数据</div>';
+  return html;
 }
 
 function renderRiskTab(r){
@@ -5583,7 +5739,7 @@ function renderDqTab(r){
       ${renderPaginatedTable('posMissing',['账户代码','账户名称','应有工作日','缺失天数','缺失比例','严重程度','部分缺失日期'],r.posMissingReport.map(m=>[`<span class="font-mono">${m.code}</span>`,m.name,m.totalWorkdays,m.missingCount,`${(m.missingRate*100).toFixed(1)}%`,m.isSevere?'<span class="badge badge-red">严重缺失</span>':'<span class="badge badge-green">已填充</span>',m.missingDates.join(', ')]),{rowClass:m=>m[5].includes('严重')?'anomaly-row':''})}
     </div></div>`;
   }
-  return html;
+  return renderTypeTab(r)+html+renderRiskTab(r);
 }
 
 // 规模分布柱状图：按所选月末时点重绘
@@ -5658,12 +5814,7 @@ function initCharts(result){
     chart.setOption({tooltip:{trigger:'item',formatter:'{b}: {c}亿 ({d}%)'},series:[{type:'pie',radius:['40%','70%'],label:{show:true,formatter:'{b}\n{d}%'},data:result.bondTypeComp.ll}]});
     chartInstances['llType']=chart;
   }
-  const hdCompEl=document.getElementById('chart-hd-comp');
-  if(hdCompEl&&result.holdingsAnalysis&&result.holdingsAnalysis.compData&&result.holdingsAnalysis.compData.length>0){
-    const chart=initChart(hdCompEl);
-    chart.setOption({tooltip:{trigger:'item',formatter:'{b}: {c}亿 ({d}%)'},series:[{type:'pie',radius:['40%','70%'],label:{show:true,formatter:'{b}\n{d}%'},data:result.holdingsAnalysis.compData}]});
-    chartInstances['hdComp']=chart;
-  }
+
 }
 
 const pendingFiles={flow:[],pos:[],hdStart:[],hdEnd:[],acctInfo:[]};
