@@ -107,7 +107,7 @@ test('fifth-slot parsing accepts quote-only and mixed-information workbooks',()=
 });
 test('module adds no networking or persistent business storage',()=>{
  const ui=html.match(/\/\/ BOND_MARKET_UI_BEGIN([\s\S]*?)\/\/ BOND_MARKET_UI_END/)[1];
- assert(!/\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|localStorage|sessionStorage|indexedDB|setWidgetState/.test(moduleSource+ui));assert(html.includes('每页15条'));assert(html.includes('trading-analyzer-release" content="2026.11.03.2'));
+ assert(!/\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|localStorage|sessionStorage|indexedDB|setWidgetState/.test(moduleSource+ui));assert(html.includes('每页15条'));assert(html.includes('trading-analyzer-release" content="2026.11.04.1'));
 });
 
 const fundData=(rows,codes=['000123.OF'],names=['虚构基金'])=>M.merge([M.parseSheet(sheet(rows,codes,names),'fictional-quotes.xlsx','基金')]);
@@ -154,5 +154,5 @@ test('a later fund sheet cutoff does not make a bond observation complete',()=>{
 });
 test('flat unit NAV is retained as a price change and labelled without implying total return',()=>{
  const d=fundData([['2026-06-01',1],['2026-06-08',1]]),g=first([fundFlow('2026-06-01','卖出')],d);
- assert.equal(g.week.full.return,0);assert(html.includes('零净值变化不代表零投资收益'));assert(html.includes('单位净值变动未加入分红和收益分配'));
+ assert.equal(g.week.full.return,0);assert(html.includes('零净值变化不代表零投资收益'));
 });
