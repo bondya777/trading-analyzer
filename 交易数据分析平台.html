@@ -420,7 +420,7 @@ th .th-sort:hover{color:#1d4ed8}
 /* MANAGER_REVIEW_CSS_END */
 
 </style>
-<meta name="trading-analyzer-release" content="2026.11.04.1">
+<meta name="trading-analyzer-release" content="2026.11.06.1">
 </head>
 <body>
 <div class="container">
@@ -1140,7 +1140,7 @@ function detectAnomalies(dfAll,scaleMap){
   return[...big.slice(0,30),...freq.slice(0,20)];
 }
 
-// ===== 规模分档月度快照（规模分布月筛 + 分档账户数折线；每月末时点按当月最新规模动态分档）=====
+// ===== 规模分档月度快照（规模分布月筛 + 分组规模折线；每月末时点按当月最新规模动态分档）=====
 const SIZE_BUCKETS=['<1亿','1-5亿','5-20亿','20-50亿','50-100亿','100亿+'];
 function buildSizeDistMonthly(dfPosClean,activeCodes){
   // 只统计 交易账户∩规模表；当月快照只计当月有报告的账户（取当月最后一条），停报账户次月起退出
@@ -1172,9 +1172,9 @@ function buildSizeDistMonthly(dfPosClean,activeCodes){
   return{months,byMonth,buckets:SIZE_BUCKETS};
 }
 
-// ===== 批次2：通用分组月度账户数走势（规模档/委托人类型/策略一级分类 维度切换用）=====
+// ===== 批次2：通用分组月度规模走势（规模档/委托人类型/策略一级分类 维度切换用）=====
 // 口径与 buildSizeDistMonthly 一致：交易账户∩规模表，当月最后一条快照；keyOf(code)→组名
-// 组数超过 cap 时按「最新月账户数」取 Top cap-1，其余并入「其他」
+// 组数超过 cap 时按「最新月规模」取 Top cap-1，其余并入「其他」
 function buildGroupMonthly(dfPosClean,activeCodes,keyOf,cap){
   const byCodeMonth=new Map();
   const monthSet=new Set();
@@ -1190,15 +1190,16 @@ function buildGroupMonthly(dfPosClean,activeCodes,keyOf,cap){
   const months=Array.from(monthSet).sort();
   if(!months.length)return{months,groups:[],byMonth:{}};
   const lastM=months[months.length-1];
-  const lastCnt={};
+  const lastSize={};
   for(const[key,r]of byCodeMonth){
-    if(!key.endsWith('|'+lastM))continue;
     const g=keyOf(toStr(r._code))||'未登记';
-    lastCnt[g]=(lastCnt[g]||0)+1;
+    // 保留以前月份出现的分组；最新月未报告则该组规模为零。
+    if(lastSize[g]==null)lastSize[g]=0;
+    if(key.endsWith('|'+lastM))lastSize[g]+=r._size;
   }
-  let groups=Object.keys(lastCnt);
+  let groups=Object.keys(lastSize);
   if(cap&&groups.length>cap){
-    const top=groups.sort((a,b)=>lastCnt[b]-lastCnt[a]).slice(0,cap-1);
+    const top=groups.filter(g=>g!=='其他').sort((a,b)=>lastSize[b]-lastSize[a]).slice(0,cap-1);
     const topSet=new Set(top);
     // 重映射：非 Top 组并入「其他」
     const remap=g=>topSet.has(g)?g:'其他';
@@ -1216,7 +1217,7 @@ function buildGroupMonthly(dfPosClean,activeCodes,keyOf,cap){
     }
     return{months,groups:[...top,'其他'],byMonth};
   }
-  groups.sort((a,b)=>(lastCnt[b]||0)-(lastCnt[a]||0));
+  groups.sort((a,b)=>(lastSize[b]||0)-(lastSize[a]||0));
   const byMonth={};
   for(const m of months){
     const snap={};
@@ -2815,7 +2816,7 @@ function initChart(el){
 // BOND_MARKET_BEGIN
 // Generic local-only parsing and calculations. No embedded prices or account data.
 const BondMarket = (() => {
-  const VERSION='2026.11.04.1', DAY=86400000;
+  const VERSION='2026.11.06.1', DAY=86400000;
   const text=v=>v==null?'':String(v).trim();
   function number(v){
     if(typeof v==='number')return Number.isFinite(v)?v:null;
@@ -3014,7 +3015,7 @@ const BondMarket = (() => {
 // INDEX_REPLAY_BEGIN
 // Generic in-memory index replay. Contains no business records or embedded quotes.
 const IndexReplay=(()=>{
-  const VERSION='2026.11.04.1',EPS=1e-10;
+  const VERSION='2026.11.06.1',EPS=1e-10;
   const CATEGORIES=[
     {key:'rateShort',label:'利率债0—7年',code:'CBA33401.CS',name:'中债-0-7年国债及政策性金融债财富(总值)指数'},
     {key:'rateLong',label:'利率债7年以上',code:'CBA34301.CS',name:'中债-7-30年国债及政策性金融债财富(总值)指数'},
@@ -4281,7 +4282,7 @@ function renderOverviewTab(r,dept,sub){
     html+=`<div class="card"><div class="card-header"><div class="card-title">规模分布</div></div><div class="card-body">
       <div style="margin-bottom:10px"><select id="sizeDistMonth" onchange="drawSizeDistBar(this.value)" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">${(sub.sizeDistMonthly?sub.sizeDistMonthly.months:[]).map(m=>`<option value="${m}"${m===(sub.sizeDistMonthly.months[sub.sizeDistMonthly.months.length-1])?' selected':''}>${m}</option>`).join('')}</select></div>
       <div id="chart-size-dist" class="chart"></div>
-      <div class="section-title" style="margin-top:16px">分档账户数月度走势（点击图例可勾选/取消分组，支持多组对比）</div>
+      <div class="section-title" style="margin-top:16px">分组规模月度走势（点击图例可勾选/取消分组，支持多组对比）</div>
       <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px">
         <span style="font-size:12px;color:#64748b">分组维度：</span>
         <select id="sizeTsDim" onchange="drawSizeTsDim(this.value)" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">
@@ -4363,14 +4364,21 @@ function initOverviewCharts(sub){
   }
 }
 
-// 批次2：分档账户数折线维度切换重绘
+// 批次2：分组规模折线维度切换重绘
 function drawSizeTsDim(dimKey){
   const pack=window.__sdmX;
   const chart=chartInstances['sizeTs'];
   if(!pack||!chart||!pack[dimKey])return;
   const d=pack[dimKey];
   const colors=['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316'];
-  chart.setOption({tooltip:{trigger:'axis'},legend:{data:d.groups,type:'scroll'},grid:{left:'3%',right:'4%',bottom:'3%',containLabel:true},xAxis:{type:'category',data:d.months},yAxis:{type:'value',name:'账户数',minInterval:1},series:d.groups.map((g,i)=>({name:g,type:'line',data:d.months.map(m=>d.byMonth[m]&&d.byMonth[m][g]?d.byMonth[m][g].count:null),smooth:true,connectNulls:true,color:colors[i%colors.length]}))},true);
+  chart.setOption({
+    tooltip:{trigger:'axis',valueFormatter:v=>v==null?'—':Number(v).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})+' 亿元'},
+    legend:{data:d.groups,type:'scroll'},
+    grid:{left:'3%',right:'4%',bottom:'3%',containLabel:true},
+    xAxis:{type:'category',data:d.months},
+    yAxis:{type:'value',name:'规模（亿元）'},
+    series:d.groups.map((g,i)=>({name:g,type:'line',data:d.months.map(m=>d.byMonth[m]&&d.byMonth[m][g]?d.byMonth[m][g].size:null),smooth:true,connectNulls:true,color:colors[i%colors.length]}))
+  },true);
 }
 
 function renderBehaviorTab(r){
