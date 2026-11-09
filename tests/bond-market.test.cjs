@@ -103,11 +103,12 @@ test('fifth-slot parsing accepts quote-only and mixed-information workbooks',()=
  new vm.Script(html.match(/<script>([\s\S]*?)<\/script>\s*<\/body>/)[1]).runInContext(c);
  c.workbook={SheetNames:['策略','债券','基金'],Sheets:{策略:{rows:[['项目编号','SAC账户名称','静态收益率'],['DEMO_ACCOUNT','虚构账户',2]]},债券:{rows:sheet([['2026-06-01',100]])},基金:{rows:sheet([['2026-06-01',1.2]],['000123.OF'],['虚构基金'])}}};
  const part=vm.runInContext('parseAcctInfoWb(workbook,"fictional-info.xlsx")',c);assert.equal(part.strategy.length,1);assert.equal(part.marketParts.length,2);assert.equal(part.found.filter(x=>x.type==='market').length,2);assert(part.found.some(x=>x.label.includes('基金单位净值')));
- assert(html.includes('&&!acctInfo.marketParts.length&&!acctInfo.indexParts.length)acctInfo=null;'));
+ c.workbook={SheetNames:['债务主体'],Sheets:{债务主体:{rows:[['代码','名称','债务主体'],['DEMO_BOND','虚构债券','虚构主体']]}}};
+ const reference=vm.runInContext('parseAcctInfoWb(workbook,"fictional-reference.xlsx")',c);assert.equal(reference.issuerParts.length,1);assert.equal(reference.issuerParts[0].rows.length,1);assert.equal(reference.found[0].type,'issuer');
 });
 test('module adds no networking or persistent business storage',()=>{
  const ui=html.match(/\/\/ BOND_MARKET_UI_BEGIN([\s\S]*?)\/\/ BOND_MARKET_UI_END/)[1];
- assert(!/\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|localStorage|sessionStorage|indexedDB|setWidgetState/.test(moduleSource+ui));assert(html.includes('每页15条'));assert(html.includes('trading-analyzer-release" content="2026.11.06.1'));
+ assert(!/\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|localStorage|sessionStorage|indexedDB|setWidgetState/.test(moduleSource+ui));assert(html.includes('每页15条'));assert(html.includes('trading-analyzer-release" content="2026.11.09.1'));
 });
 
 const fundData=(rows,codes=['000123.OF'],names=['虚构基金'])=>M.merge([M.parseSheet(sheet(rows,codes,names),'fictional-quotes.xlsx','基金')]);
