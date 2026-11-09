@@ -94,3 +94,22 @@ test('zero-only dormant snapshot rows do not inflate issuer or unmatched-bond co
 test('new model and UI have no network APIs or persistent business storage',()=>{
  const source=extract('SUBJECT_REPLAY')+extract('SUBJECT_REPLAY_UI');assert(!/\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|localStorage|sessionStorage|indexedDB/.test(source));assert(html.includes("connect-src 'none'"));
 });
+test('opening holdings use actual face, remain invariant by selected date and split with shared managers',()=>{
+ const r=fixture();r._store.hdStart.bonds[0].mv=3000;const idx=I.build(r),q=issuer(idx);near(q.at(first).opening,.41);near(q.at(last).opening,.41);assert.equal(q.at(last).openingHolders,3);near(q.details('DEMO_A',last).find(s=>s.code==='DEMO_1').opening,.1);
+ const m=issuer(idx,{level:'manager',dept:'演示投顾部',manager:'演示投顾部|演示经理甲'});near(m.at(last).opening,.15);
+});
+test('fully sold opening positions remain in the holder table and bond drilldown',()=>{
+ const r=fixture();r._store.zqAll=[flow('DEMO_A','2026-01-06','卖出',.1)];r._store.hdEnd.bonds=r._store.hdEnd.bonds.filter(h=>h.acct!=='DEMO_A'||h.code!=='DEMO_1');const q=S.query(I.build(r),data,{level:'account',dept:'all',account:'DEMO_A'},{mode:'security',security}),s=q.at(last);near(s.opening,.1);assert.equal(s.projected,0);assert.equal(s.actual,0);assert.equal(s.rows.length,1);near(q.details('DEMO_A',last)[0].opening,.1);
+});
+test('missing opening face stays unavailable instead of falling back to market value',()=>{
+ const r=fixture();r._store.hdStart.bonds[0].faceKnown=false;const q=issuer(I.build(r));assert.equal(q.at(last).opening,null);assert.equal(q.details('DEMO_A',last).find(s=>s.code==='DEMO_1').opening,null);
+});
+test('fund opening holdings keep the existing amount basis rather than using face or shares',()=>{
+ const r=fixture();r._store.hdStart.funds=[{acct:'DEMO_A',code:'DEMO_FUND',name:'虚构基金',market:'上交所',mv:1000,face:9000,quantity:80000}];const q=S.query(I.build(r),data,all,{mode:'security',security:{kind:'fund',code:'DEMO_FUND',market:'SH',key:'DEMO_FUND|SH|fund'}});near(q.at(last).opening,.1);
+});
+test('hover trade rows group the same date by account and buy/sell without losing either direction',()=>{
+ const r=fixture();r._store.zqAll.push(flow('DEMO_A','2026-01-06','买入',.01),flow('DEMO_A','2026-01-06','卖出',.01),flow('DEMO_B','2026-01-06','卖出',.02));const q=issuer(I.build(r)),rows=q.tradeDetails('2026-01-06');assert.equal(rows.length,3);const a=rows.find(r=>r.account==='DEMO_A'&&r.action==='buy');near(a.amount,.0606);assert.equal(a.count,2);assert.deepEqual(Array.from(a.managers),['演示经理甲','演示经理乙']);near(rows.find(r=>r.account==='DEMO_A'&&r.action==='sell').amount,.0101);assert.equal(q.tradeDetails('2026-01-05').length,0);
+});
+test('hover identities respect department selection and manager weighting exactly once',()=>{
+ const idx=I.build(fixture()),d=issuer(idx,{level:'department',dept:'演示投顾部'}),m=issuer(idx,{level:'manager',dept:'演示投顾部',manager:'演示投顾部|演示经理甲'});assert.equal(d.tradeDetails('2026-01-08').length,0);const rows=m.tradeDetails('2026-01-06');assert.equal(rows.length,1);assert.equal(rows[0].account,'DEMO_A');near(rows[0].amount,.02525);assert.equal(rows[0].weight,.5);assert.equal(rows[0].managers.length,2);
+});
